@@ -9,7 +9,7 @@ import json
 import os
 import re
 import time
-from curl_utils import send_request
+from curl_utils import parse_curl, send_request
 from http.server import BaseHTTPRequestHandler, HTTPServer
 from urllib.parse import unquote
 
@@ -18,6 +18,8 @@ PORT = 8765
 DIR = os.path.dirname(os.path.abspath(__file__))
 TOOLS_FILE = os.path.join(DIR, "tools.json")
 ADMIN_CONFIG_FILE = os.path.join(DIR, "admin_config.json")
+DEV_SUBMISSIONS_FILE = os.path.join(DIR, "dev_submissions.json")
+DEV_SUBMISSIONS_MAX = 100
 COOKIE_NAME = "hutu_session"
 SESSION_MAX_AGE = 7 * 24 * 3600
 
@@ -79,6 +81,48 @@ def slugify(text: str) -> str:
     return slug or "tool"
 
 
+def load_dev_submissions() -> list:
+    if not os.path.isfile(DEV_SUBMISSIONS_FILE):
+        return []
+    with open(DEV_SUBMISSIONS_FILE, "r", encoding="utf-8") as f:
+        return json.load(f)
+
+
+def save_dev_submissions(items: list):
+    with open(DEV_SUBMISSIONS_FILE, "w", encoding="utf-8") as f:
+        json.dump(items, f, ensure_ascii=False, indent=2)
+        f.write("\n")
+
+
+def add_dev_submission(curl: str, submitter: str = "") -> dict:
+    curl = curl.strip()
+    if not curl:
+        raise ValueError("curl 不能为空")
+    submitter = (submitter or "").strip() or "未知"
+    try:
+        parsed = parse_curl(curl)
+        method = parsed["method"]
+        url = parsed["url"]
+    except Exception:
+        method = "GET"
+        url = ""
+
+    entry = {
+        "id": int(time.time() * 1000),
+        "time": int(time.time() * 1000),
+        "curl": curl,
+        "method": method,
+        "url": url,
+        "submitter": submitter,
+    }
+    items = load_dev_submissions()
+    items.insert(0, entry)
+    if len(items) > DEV_SUBMISSIONS_MAX:
+        items = items[:DEV_SUBMISSIONS_MAX]
+    save_dev_submissions(items)
+    return entry
+
+
 class Handler(BaseHTTPRequestHandler):
     def log_message(self, format, *args):
         pass
@@ -128,6 +172,10 @@ class Handler(BaseHTTPRequestHandler):
                 self._json_response({"ok": True, "username": user})
             else:
                 self._json_response({"ok": False}, status=401)
+            return
+
+        if path == "/api/request-local/dev-submissions":
+            self._json_response({"ok": True, "items": load_dev_submissions()})
             return
 
         if path in ("/", "/index.html"):
@@ -189,6 +237,10 @@ class Handler(BaseHTTPRequestHandler):
 
         if path == "/api/request-local/send":
             self._handle_request_local_send()
+            return
+
+        if path == "/api/request-local/submit-dev":
+            self._handle_request_local_submit_dev()
             return
 
         self.send_error(404)
@@ -282,6 +334,23 @@ class Handler(BaseHTTPRequestHandler):
             self._json_response({"ok": False, "error": str(e)})
         except Exception as e:
             self._json_response({"ok": False, "error": f"发送失败: {e}"})
+
+    def _handle_request_local_submit_dev(self):
+        length = int(self.headers.get("Content-Length", 0))
+        body = self.rfile.read(length).decode("utf-8")
+
+        try:
+            payload = json.loads(body)
+            curl = payload.get("curl", "")
+            submitter = payload.get("submitter", "")
+            entry = add_dev_submission(curl, submitter)
+            self._json_response({"ok": True, "item": entry})
+        except json.JSONDecodeError as e:
+            self._json_response({"ok": False, "error": f"请求格式错误: {e}"})
+        except (ValueError, TypeError) as e:
+            self._json_response({"ok": False, "error": str(e)})
+        except Exception as e:
+            self._json_response({"ok": False, "error": f"提交失败: {e}"})
 
     def _serve_file(self, rel_path: str, content_type: str = None):
         path = os.path.join(DIR, rel_path)

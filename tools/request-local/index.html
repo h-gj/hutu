@@ -21,7 +21,7 @@
   <main class="container container-wide">
     <div class="tool-header">
       <h1>Request Local</h1>
-      <p class="subtitle">粘贴线上 curl，自动替换为本地 127.0.0.1 请求并发送查看响应</p>
+      <p class="subtitle">在地址栏粘贴 curl，自动转为本地请求并发送查看响应</p>
     </div>
 
     <div class="port-bar">
@@ -30,59 +30,95 @@
       <button type="button" class="btn-secondary" id="open-mapping-btn">配置映射</button>
       <span class="port-hint" id="port-hint" hidden></span>
       <button type="button" class="btn-primary btn-accent" id="paste-send-btn">一键粘贴并发送</button>
-      <button type="button" class="btn-primary" id="convert-btn">转换</button>
-      <button type="button" class="btn-primary" id="send-btn">发送请求</button>
-      <span class="status-badge" id="status-badge" hidden></span>
-    </div>
-
-    <div class="panels panels-3">
-      <div class="panel">
-        <div class="panel-header">
-          <span>原始 curl</span>
-          <button type="button" class="btn-link" id="clear-input">清空</button>
-        </div>
-        <textarea id="curl-input" spellcheck="false" placeholder="粘贴 curl 命令..."></textarea>
-      </div>
-
-      <div class="panel">
-        <div class="panel-header">
-          <span>本地 curl</span>
-          <button type="button" class="btn-link" id="copy-local">复制</button>
-        </div>
-        <textarea id="local-curl" class="output-area" spellcheck="false" readonly placeholder="转换后的本地 curl"></textarea>
-      </div>
-
-      <div class="panel">
-        <div class="panel-header">
-          <span>响应</span>
-          <span class="panel-meta" id="response-meta"></span>
-        </div>
-        <textarea id="response-body" class="output-area response-area" spellcheck="false" readonly placeholder="响应内容将显示在这里"></textarea>
-      </div>
+      <button type="button" class="btn-primary btn-submit-dev" id="paste-submit-dev-btn">一键粘贴并提交给开发</button>
     </div>
 
     <div id="error" class="error" hidden></div>
 
+    <section class="request-preview-section" id="request-preview-section">
+      <div class="preview-section-header">
+        <h2>请求预览</h2>
+        <button type="button" class="btn-link" id="clear-preview">清空</button>
+      </div>
+
+      <div class="preview-request-bar">
+        <select id="preview-method" class="preview-method-select" title="请求方法"></select>
+        <input type="text" id="preview-url" class="preview-url-input" spellcheck="false"
+               placeholder="粘贴 curl 或输入本地 URL...">
+        <button type="button" class="btn-primary preview-send-btn" id="send-btn">发送</button>
+      </div>
+
+      <div class="preview-tabs">
+        <button type="button" class="preview-tab active" data-preview-tab="params">Params</button>
+        <button type="button" class="preview-tab" data-preview-tab="headers" id="preview-tab-headers">Headers</button>
+        <button type="button" class="preview-tab" data-preview-tab="body">Body</button>
+      </div>
+
+      <div class="preview-panel" data-preview-panel="params">
+        <p class="preview-panel-label">Query Params</p>
+        <div class="preview-table-wrap">
+          <table class="preview-table">
+            <thead>
+              <tr>
+                <th width="36"></th>
+                <th>Key</th>
+                <th>Value</th>
+              </tr>
+            </thead>
+            <tbody id="preview-params-tbody"></tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="preview-panel" data-preview-panel="headers" hidden>
+        <p class="preview-panel-label">Headers</p>
+        <div class="preview-table-wrap">
+          <table class="preview-table">
+            <thead>
+              <tr>
+                <th width="36"></th>
+                <th>Key</th>
+                <th>Value</th>
+              </tr>
+            </thead>
+            <tbody id="preview-headers-tbody"></tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="preview-panel" data-preview-panel="body" hidden>
+        <p class="preview-panel-label">Body</p>
+        <textarea id="preview-body-input" class="preview-body-input" spellcheck="false"
+                  placeholder="请求体内容（无 body 时留空）"></textarea>
+      </div>
+    </section>
+
+    <section class="response-section">
+      <div class="response-header">
+        <h2>响应</h2>
+        <span class="status-badge" id="status-badge" hidden></span>
+        <span class="response-meta" id="response-meta"></span>
+      </div>
+      <textarea id="response-body" class="response-body" spellcheck="false" readonly
+                placeholder="响应内容将显示在这里"></textarea>
+    </section>
+
     <section class="history-section">
+      <div class="section-panel-tabs">
+        <button type="button" class="section-panel-tab active" data-panel="history">发送历史</button>
+        <button type="button" class="section-panel-tab" data-panel="feedback">测试提交</button>
+      </div>
+
       <div class="history-header">
-        <h2>发送历史</h2>
-        <button type="button" class="btn-secondary" id="clear-history">清空历史</button>
+        <p class="panel-desc" id="panel-desc">本地发送记录</p>
+        <button type="button" class="btn-secondary" id="clear-history">清空本地历史</button>
       </div>
       <div class="history-wrap">
         <table class="history-table" id="history-table">
-          <thead>
-            <tr>
-              <th width="150">时间</th>
-              <th width="60">方法</th>
-              <th>URL</th>
-              <th width="70">状态</th>
-              <th width="70">耗时</th>
-              <th width="120">操作</th>
-            </tr>
-          </thead>
+          <thead id="history-thead"></thead>
           <tbody id="history-tbody"></tbody>
         </table>
-        <div class="history-empty" id="history-empty" hidden>暂无发送记录</div>
+        <div class="history-empty" id="history-empty" hidden>暂无记录</div>
       </div>
       <div class="history-pagination" id="history-pagination" hidden>
         <span class="history-page-info" id="history-page-info"></span>
@@ -131,7 +167,29 @@
     </div>
   </div>
 
+  <div class="modal-overlay" id="name-modal" hidden>
+    <div class="modal name-modal">
+      <div class="modal-header">
+        <h3>设置提交姓名</h3>
+        <button type="button" class="modal-close" id="name-modal-close">&times;</button>
+      </div>
+      <div class="modal-body">
+        <p class="mapping-desc">提交给开发时需填写姓名，保存后下次自动使用</p>
+        <div class="form-row">
+          <label for="submitter-name">姓名</label>
+          <input type="text" id="submitter-name" placeholder="请输入你的姓名" maxlength="32">
+        </div>
+        <div id="name-modal-error" class="login-error" hidden></div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn-ghost" id="name-modal-cancel">取消</button>
+        <button type="button" class="btn-primary" id="name-modal-confirm">确认并提交</button>
+      </div>
+    </div>
+  </div>
+
   <script src="/static/js/curl-convert.js"></script>
+  <script src="/static/js/request-preview.js"></script>
   <script src="/static/js/request-local.js"></script>
 </body>
 </html>

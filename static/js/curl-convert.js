@@ -178,5 +178,13 @@ const CurlConvert = (() => {
     };
   }
 
-  return { convertCurl };
+  function buildCurlFromRequest(request) {
+    return buildCurl({
+      method: request.method || 'GET',
+      headers: request.headers || {},
+      body: request.body,
+    }, request.url);
+  }
+
+  return { convertCurl, parseCurl, buildCurlFromRequest };
 })();

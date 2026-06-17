@@ -1,5 +1,3 @@
-const curlInput = document.getElementById('curl-input');
-const localCurl = document.getElementById('local-curl');
 const responseBody = document.getElementById('response-body');
 const responseMeta = document.getElementById('response-meta');
 const portInput = document.getElementById('port');
@@ -7,10 +5,11 @@ const errorEl = document.getElementById('error');
 const statusBadge = document.getElementById('status-badge');
 
 let lastRequest = null;
-let convertTimer = null;
+let lastOriginalCurl = '';
 
 const PORT_STORAGE_KEY = 'request-local-port';
 const PORT_MAPPINGS_STORAGE_KEY = 'request-local-port-mappings';
+const SUBMITTER_NAME_KEY = 'request-local-submitter-name';
 const HISTORY_STORAGE_KEY = 'request-local-history';
 const DEFAULT_PORT = 8000;
 const HISTORY_MAX = 100;
@@ -19,8 +18,13 @@ const BODY_STORAGE_MAX = 8000;
 
 let history = [];
 let historyPage = 1;
+let serverHistory = [];
+let serverHistoryPage = 1;
+let activePanelTab = 'history';
+let pendingDevCurl = null;
 let portMappings = [];
 let lastUsedPort = null;
+let skipClearOriginalCurl = false;
 
 const SAMPLE_CURL = `curl 'https://v8api.k0v.cn/api/datacenter/partno-info/public/?partno=09475656032&mfg=HARTING+Technology+Group' \\
   -H 'accept: application/json, text/plain, */*' \\
@@ -35,7 +39,14 @@ const SAMPLE_CURL = `curl 'https://v8api.k0v.cn/api/datacenter/partno-info/publi
   -H 'source: web' \\
   -H 'user-agent: Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36'`;
 
-curlInput.value = SAMPLE_CURL;
+function getLocalCurl() {
+  if (!lastRequest) return '';
+  return CurlConvert.buildCurlFromRequest(lastRequest);
+}
+
+function getRecordCurl() {
+  return lastOriginalCurl || getLocalCurl();
+}
 
 function showError(msg) {
   errorEl.textContent = msg;
@@ -124,7 +135,7 @@ function renderPortMappings() {
       portMappings.splice(+btn.dataset.delMap, 1);
       savePortMappings();
       renderPortMappings();
-      convert();
+      reconvert();
     });
   });
 }
@@ -166,7 +177,7 @@ function updateMappingField(input) {
 
   savePortMappings();
   hideError();
-  convert();
+  reconvert();
 }
 
 function addPortMapping() {
@@ -195,35 +206,52 @@ function addPortMapping() {
   renderPortMappings();
   domainInput.value = '';
   hideError();
-  convert();
+  reconvert();
 }
 
-function convert() {
-  const curl = curlInput.value.trim();
-  if (!curl) {
-    localCurl.value = '';
+function applyPreviewRequest(request) {
+  lastRequest = request;
+  if (!skipClearOriginalCurl) lastOriginalCurl = '';
+}
+
+function convertFromCurl(curl) {
+  const text = curl.trim();
+  if (!text) {
+    lastOriginalCurl = '';
     lastRequest = null;
     lastUsedPort = null;
     updatePortHint(null, null);
+    RequestPreview.clear();
     hideError();
     return false;
   }
 
   try {
-    const data = CurlConvert.convertCurl(curl, getPort(), portMappings);
-    localCurl.value = data.local_curl;
+    const data = CurlConvert.convertCurl(text, getPort(), portMappings);
+    lastOriginalCurl = text;
     lastRequest = data.request;
     lastUsedPort = data.used_port;
     updatePortHint(data.matched_domain, data.used_port);
+    skipClearOriginalCurl = true;
+    RequestPreview.populate(lastRequest);
+    skipClearOriginalCurl = false;
     hideError();
     return true;
   } catch (e) {
-    localCurl.value = '';
+    lastOriginalCurl = text;
     lastRequest = null;
     lastUsedPort = null;
     updatePortHint(null, null);
+    RequestPreview.clear();
+    RequestPreview.setUrlBar(text);
     showError(e.message || '转换失败');
     return false;
+  }
+}
+
+function reconvert() {
+  if (lastOriginalCurl) {
+    convertFromCurl(lastOriginalCurl);
   }
 }
 
@@ -251,12 +279,45 @@ function loadHistory() {
   } catch {
     history = [];
   }
-  historyPage = 1;
-  renderHistory();
+  if (activePanelTab === 'history') {
+    historyPage = 1;
+    renderHistory();
+  }
 }
 
 function saveHistory() {
   localStorage.setItem(HISTORY_STORAGE_KEY, JSON.stringify(history));
+}
+
+async function loadServerHistory() {
+  try {
+    const res = await fetch('/api/request-local/dev-submissions');
+    const data = await res.json();
+    serverHistory = data.ok ? (data.items || []) : [];
+  } catch {
+    serverHistory = [];
+  }
+  if (activePanelTab === 'feedback') {
+    serverHistoryPage = 1;
+    renderHistory();
+  }
+}
+
+function switchPanelTab(panel) {
+  activePanelTab = panel;
+  document.querySelectorAll('.section-panel-tab').forEach(btn => {
+    btn.classList.toggle('active', btn.dataset.panel === panel);
+  });
+  document.getElementById('clear-history').hidden = panel !== 'history';
+  document.getElementById('panel-desc').textContent = panel === 'history'
+    ? '本地发送记录'
+    : '提交给开发的 curl 记录';
+  if (panel === 'history') {
+    historyPage = 1;
+    renderHistory();
+  } else {
+    loadServerHistory();
+  }
 }
 
 function formatTime(ts) {
@@ -270,7 +331,7 @@ function addHistory(entry) {
   }
   historyPage = 1;
   saveHistory();
-  renderHistory();
+  if (activePanelTab === 'history') renderHistory();
 }
 
 function getHistoryPageData() {
@@ -287,7 +348,46 @@ function getHistoryPageData() {
   };
 }
 
+function getServerHistoryPageData() {
+  const total = serverHistory.length;
+  const totalPages = Math.max(1, Math.ceil(total / HISTORY_PAGE_SIZE));
+  if (serverHistoryPage > totalPages) serverHistoryPage = totalPages;
+  if (serverHistoryPage < 1) serverHistoryPage = 1;
+  const start = (serverHistoryPage - 1) * HISTORY_PAGE_SIZE;
+  return {
+    items: serverHistory.slice(start, start + HISTORY_PAGE_SIZE),
+    total,
+    totalPages,
+    page: serverHistoryPage,
+  };
+}
+
+function renderHistoryHead() {
+  const thead = document.getElementById('history-thead');
+  if (activePanelTab === 'history') {
+    thead.innerHTML = `
+      <tr>
+        <th width="150">时间</th>
+        <th width="60">方法</th>
+        <th>URL</th>
+        <th width="70">状态</th>
+        <th width="70">耗时</th>
+        <th width="120">操作</th>
+      </tr>`;
+  } else {
+    thead.innerHTML = `
+      <tr>
+        <th width="150">时间</th>
+        <th width="80">提交人</th>
+        <th width="60">方法</th>
+        <th>URL</th>
+        <th width="120">操作</th>
+      </tr>`;
+  }
+}
+
 function renderHistory() {
+  renderHistoryHead();
   const tbody = document.getElementById('history-tbody');
   const empty = document.getElementById('history-empty');
   const table = document.getElementById('history-table');
@@ -296,47 +396,73 @@ function renderHistory() {
   const prevBtn = document.getElementById('history-prev');
   const nextBtn = document.getElementById('history-next');
 
-  if (history.length === 0) {
+  const isLocal = activePanelTab === 'history';
+  const pageData = isLocal ? getHistoryPageData() : getServerHistoryPageData();
+  const { items, total, totalPages, page } = pageData;
+
+  if (total === 0) {
     tbody.innerHTML = '';
     empty.hidden = false;
+    empty.textContent = isLocal ? '暂无本地发送记录' : '暂无测试提交';
     table.hidden = true;
     pagination.hidden = true;
     return;
   }
 
-  const { items, total, totalPages, page } = getHistoryPageData();
-
   empty.hidden = true;
   table.hidden = false;
   pagination.hidden = false;
-  pageInfo.textContent = `共 ${total} 条，第 ${page}/${totalPages} 页（每页 ${HISTORY_PAGE_SIZE} 条，最多保存 ${HISTORY_MAX} 条）`;
+
+  const maxLabel = isLocal ? `最多保存 ${HISTORY_MAX} 条` : `服务器最多 ${HISTORY_MAX} 条`;
+  pageInfo.textContent = `共 ${total} 条，第 ${page}/${totalPages} 页（每页 ${HISTORY_PAGE_SIZE} 条，${maxLabel}）`;
   prevBtn.disabled = page <= 1;
   nextBtn.disabled = page >= totalPages;
 
-  tbody.innerHTML = items.map(item => {
-    const statusClass = item.success && item.status >= 200 && item.status < 300 ? 'ok' : 'err';
-    const statusText = item.status ?? (item.error ? '失败' : '-');
-    const elapsed = item.elapsed_ms != null ? `${item.elapsed_ms} ms` : '-';
-    return `
+  if (isLocal) {
+    tbody.innerHTML = items.map(item => {
+      const statusClass = item.success && item.status >= 200 && item.status < 300 ? 'ok' : 'err';
+      const statusText = item.status ?? (item.error ? '失败' : '-');
+      const elapsed = item.elapsed_ms != null ? `${item.elapsed_ms} ms` : '-';
+      return `
+        <tr>
+          <td>${formatTime(item.time)}</td>
+          <td>${item.method || 'GET'}</td>
+          <td class="history-url" title="${escapeHtml(item.url || '')}">${escapeHtml(item.url || '-')}</td>
+          <td><span class="history-status ${statusClass}">${statusText}</span></td>
+          <td>${elapsed}</td>
+          <td class="history-actions">
+            <button type="button" class="history-btn" data-view-local="${item.id}">查看</button>
+            <button type="button" class="history-btn" data-replay-local="${item.id}">重发</button>
+          </td>
+        </tr>`;
+    }).join('');
+
+    tbody.querySelectorAll('[data-view-local]').forEach(btn => {
+      btn.addEventListener('click', () => viewHistory(+btn.dataset.viewLocal));
+    });
+    tbody.querySelectorAll('[data-replay-local]').forEach(btn => {
+      btn.addEventListener('click', () => replayHistory(+btn.dataset.replayLocal));
+    });
+  } else {
+    tbody.innerHTML = items.map(item => `
       <tr>
         <td>${formatTime(item.time)}</td>
+        <td>${escapeHtml(item.submitter || '未知')}</td>
         <td>${item.method || 'GET'}</td>
         <td class="history-url" title="${escapeHtml(item.url || '')}">${escapeHtml(item.url || '-')}</td>
-        <td><span class="history-status ${statusClass}">${statusText}</span></td>
-        <td>${elapsed}</td>
         <td class="history-actions">
-          <button type="button" class="history-btn" data-view="${item.id}">查看</button>
-          <button type="button" class="history-btn" data-replay="${item.id}">重发</button>
+          <button type="button" class="history-btn" data-view-server="${item.id}">查看</button>
+          <button type="button" class="history-btn" data-replay-server="${item.id}">本地重发</button>
         </td>
-      </tr>`;
-  }).join('');
+      </tr>`).join('');
 
-  tbody.querySelectorAll('[data-view]').forEach(btn => {
-    btn.addEventListener('click', () => viewHistory(+btn.dataset.view));
-  });
-  tbody.querySelectorAll('[data-replay]').forEach(btn => {
-    btn.addEventListener('click', () => replayHistory(+btn.dataset.replay));
-  });
+    tbody.querySelectorAll('[data-view-server]').forEach(btn => {
+      btn.addEventListener('click', () => viewServerSubmission(+btn.dataset.viewServer));
+    });
+    tbody.querySelectorAll('[data-replay-server]').forEach(btn => {
+      btn.addEventListener('click', () => replayServerSubmission(+btn.dataset.replayServer));
+    });
+  }
 }
 
 function escapeHtml(str) {
@@ -351,10 +477,9 @@ async function viewHistory(id) {
   const item = findHistory(id);
   if (!item) return;
 
-  curlInput.value = item.originalCurl || '';
+  lastOriginalCurl = item.originalCurl || '';
   portInput.value = item.port || DEFAULT_PORT;
   savePort();
-  localCurl.value = item.localCurl || '';
   lastRequest = item.request || null;
 
   if (item.success && item.status != null) {
@@ -368,8 +493,10 @@ async function viewHistory(id) {
     responseBody.value = item.error || item.body || '';
   }
 
-  if (!lastRequest && item.originalCurl) {
-    await convert();
+  if (!lastRequest && lastOriginalCurl) {
+    convertFromCurl(lastOriginalCurl);
+  } else if (lastRequest) {
+    RequestPreview.populate(lastRequest);
   }
   hideError();
 }
@@ -379,7 +506,29 @@ async function replayHistory(id) {
   await sendRequest();
 }
 
-function recordSendResult(curl, data) {
+function findServerSubmission(id) {
+  return serverHistory.find(h => h.id === id);
+}
+
+function viewServerSubmission(id) {
+  const item = findServerSubmission(id);
+  if (!item) return;
+
+  lastOriginalCurl = item.curl || '';
+  statusBadge.hidden = true;
+  responseMeta.textContent = '';
+  responseBody.value = '';
+  lastRequest = null;
+  convertFromCurl(lastOriginalCurl);
+  hideError();
+}
+
+async function replayServerSubmission(id) {
+  viewServerSubmission(id);
+  await sendRequest();
+}
+
+function recordSendResult(data) {
   const body = data.body || data.error || '';
   addHistory({
     id: Date.now(),
@@ -387,8 +536,8 @@ function recordSendResult(curl, data) {
     port: lastUsedPort || getPort(),
     method: lastRequest?.method || 'GET',
     url: lastRequest?.url || '',
-    originalCurl: curl,
-    localCurl: localCurl.value,
+    originalCurl: getRecordCurl(),
+    localCurl: getLocalCurl(),
     request: lastRequest ? { ...lastRequest } : null,
     status: data.status ?? null,
     elapsed_ms: data.elapsed_ms ?? null,
@@ -399,13 +548,12 @@ function recordSendResult(curl, data) {
 }
 
 async function sendRequest() {
-  const curl = curlInput.value.trim();
-  if (!curl) {
-    showError('请先粘贴 curl 命令');
+  lastRequest = RequestPreview.buildRequest();
+
+  if (!lastRequest?.url) {
+    showError('请先粘贴 curl 或输入请求 URL');
     return;
   }
-
-  if (!lastRequest && !convert()) return;
 
   setBadge('发送中...', 'loading');
   responseBody.value = '';
@@ -424,7 +572,7 @@ async function sendRequest() {
       setBadge('失败', 'err');
       showError(data.error || '请求失败');
       responseBody.value = data.error || '';
-      recordSendResult(curl, data);
+      recordSendResult(data);
       return;
     }
 
@@ -433,11 +581,11 @@ async function sendRequest() {
     responseMeta.textContent = `${data.elapsed_ms} ms`;
     responseBody.value = data.body || '';
     hideError();
-    recordSendResult(curl, data);
+    recordSendResult(data);
   } catch {
     setBadge('失败', 'err');
     showError('发送请求失败');
-    recordSendResult(curl, { ok: false, error: '发送请求失败' });
+    recordSendResult({ ok: false, error: '发送请求失败' });
   }
 }
 
@@ -451,8 +599,7 @@ async function pasteAndSend() {
       showError('剪贴板为空');
       return;
     }
-    curlInput.value = text.trim();
-    const converted = await convert();
+    const converted = convertFromCurl(text.trim());
     if (!converted) return;
     await sendRequest();
   } catch (err) {
@@ -466,9 +613,126 @@ async function pasteAndSend() {
   }
 }
 
-document.getElementById('convert-btn').addEventListener('click', convert);
+function getSubmitterName() {
+  return localStorage.getItem(SUBMITTER_NAME_KEY) || '';
+}
+
+function saveSubmitterName(name) {
+  localStorage.setItem(SUBMITTER_NAME_KEY, name.trim());
+}
+
+const nameModal = document.getElementById('name-modal');
+const nameModalError = document.getElementById('name-modal-error');
+const submitterNameInput = document.getElementById('submitter-name');
+
+function openNameModal() {
+  submitterNameInput.value = getSubmitterName();
+  nameModalError.hidden = true;
+  nameModal.hidden = false;
+  submitterNameInput.focus();
+}
+
+function closeNameModal() {
+  nameModal.hidden = true;
+  pendingDevCurl = null;
+  nameModalError.hidden = true;
+}
+
+async function doSubmitDev(curlText, submitterName) {
+  convertFromCurl(curlText);
+
+  const res = await fetch('/api/request-local/submit-dev', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ curl: curlText, submitter: submitterName }),
+  });
+  const data = await res.json();
+
+  if (!data.ok) {
+    showError(data.error || '提交失败');
+    return false;
+  }
+
+  hideError();
+  setBadge('已提交', 'ok');
+  await loadServerHistory();
+  switchPanelTab('feedback');
+  return true;
+}
+
+async function pasteAndSubmitDev() {
+  const btn = document.getElementById('paste-submit-dev-btn');
+  btn.disabled = true;
+
+  try {
+    const text = await navigator.clipboard.readText();
+    if (!text.trim()) {
+      showError('剪贴板为空');
+      return;
+    }
+
+    const name = getSubmitterName();
+    if (!name) {
+      pendingDevCurl = text.trim();
+      btn.disabled = false;
+      openNameModal();
+      return;
+    }
+
+    await doSubmitDev(text.trim(), name);
+  } catch (err) {
+    if (err?.name === 'NotAllowedError') {
+      showError('无法读取剪贴板，请允许浏览器权限或手动粘贴');
+    } else {
+      showError('读取剪贴板失败');
+    }
+  } finally {
+    btn.disabled = false;
+  }
+}
+
+async function confirmNameAndSubmit() {
+  const name = submitterNameInput.value.trim();
+  if (!name) {
+    nameModalError.textContent = '请输入姓名';
+    nameModalError.hidden = false;
+    return;
+  }
+
+  saveSubmitterName(name);
+  nameModal.hidden = true;
+  nameModalError.hidden = true;
+
+  if (!pendingDevCurl) return;
+
+  const curl = pendingDevCurl;
+  pendingDevCurl = null;
+  const btn = document.getElementById('paste-submit-dev-btn');
+  btn.disabled = true;
+  try {
+    await doSubmitDev(curl, name);
+  } finally {
+    btn.disabled = false;
+  }
+}
+
+document.getElementById('name-modal-confirm').addEventListener('click', confirmNameAndSubmit);
+document.getElementById('name-modal-close').addEventListener('click', closeNameModal);
+document.getElementById('name-modal-cancel').addEventListener('click', closeNameModal);
+nameModal.addEventListener('click', (e) => {
+  if (e.target === nameModal) closeNameModal();
+});
+submitterNameInput.addEventListener('keydown', (e) => {
+  if (e.key === 'Enter') confirmNameAndSubmit();
+});
+
 document.getElementById('send-btn').addEventListener('click', sendRequest);
 document.getElementById('paste-send-btn').addEventListener('click', pasteAndSend);
+document.getElementById('paste-submit-dev-btn').addEventListener('click', pasteAndSubmitDev);
+
+document.querySelectorAll('.section-panel-tab').forEach(btn => {
+  btn.addEventListener('click', () => switchPanelTab(btn.dataset.panel));
+});
 document.getElementById('add-mapping').addEventListener('click', addPortMapping);
 
 const mappingModal = document.getElementById('mapping-modal');
@@ -496,45 +760,28 @@ document.getElementById('map-port').addEventListener('keydown', (e) => {
   if (e.key === 'Enter') addPortMapping();
 });
 
-curlInput.addEventListener('input', () => {
-  clearTimeout(convertTimer);
-  convertTimer = setTimeout(convert, 400);
-});
-
 portInput.addEventListener('input', savePort);
 portInput.addEventListener('change', () => {
   savePort();
-  convert();
+  reconvert();
 });
 
-document.getElementById('clear-input').addEventListener('click', () => {
-  curlInput.value = '';
-  localCurl.value = '';
+document.getElementById('clear-preview').addEventListener('click', () => {
+  lastOriginalCurl = '';
+  lastRequest = null;
+  lastUsedPort = null;
+  updatePortHint(null, null);
+  RequestPreview.clear();
   responseBody.value = '';
   responseMeta.textContent = '';
   statusBadge.hidden = true;
-  lastRequest = null;
   hideError();
-  curlInput.focus();
-});
-
-document.getElementById('copy-local').addEventListener('click', async () => {
-  if (!localCurl.value) return;
-  const btn = document.getElementById('copy-local');
-  try {
-    await navigator.clipboard.writeText(localCurl.value);
-    btn.textContent = '已复制';
-  } catch {
-    localCurl.select();
-    document.execCommand('copy');
-    btn.textContent = '已复制';
-  }
-  setTimeout(() => { btn.textContent = '复制'; }, 1500);
+  document.getElementById('preview-url').focus();
 });
 
 document.getElementById('clear-history').addEventListener('click', () => {
-  if (history.length === 0) return;
-  if (!confirm('确定清空所有发送历史？')) return;
+  if (activePanelTab !== 'history' || history.length === 0) return;
+  if (!confirm('确定清空所有本地发送历史？')) return;
   history = [];
   historyPage = 1;
   saveHistory();
@@ -542,21 +789,41 @@ document.getElementById('clear-history').addEventListener('click', () => {
 });
 
 document.getElementById('history-prev').addEventListener('click', () => {
-  if (historyPage > 1) {
-    historyPage -= 1;
+  if (activePanelTab === 'history') {
+    if (historyPage > 1) {
+      historyPage -= 1;
+      renderHistory();
+    }
+  } else if (serverHistoryPage > 1) {
+    serverHistoryPage -= 1;
     renderHistory();
   }
 });
 
 document.getElementById('history-next').addEventListener('click', () => {
-  const totalPages = Math.ceil(history.length / HISTORY_PAGE_SIZE);
-  if (historyPage < totalPages) {
-    historyPage += 1;
-    renderHistory();
+  if (activePanelTab === 'history') {
+    const totalPages = Math.ceil(history.length / HISTORY_PAGE_SIZE);
+    if (historyPage < totalPages) {
+      historyPage += 1;
+      renderHistory();
+    }
+  } else {
+    const totalPages = Math.ceil(serverHistory.length / HISTORY_PAGE_SIZE);
+    if (serverHistoryPage < totalPages) {
+      serverHistoryPage += 1;
+      renderHistory();
+    }
   }
 });
 
 loadPort();
 loadPortMappings();
 loadHistory();
-convert();
+loadServerHistory();
+
+RequestPreview.init({
+  onChange: (request) => applyPreviewRequest(request),
+  onPasteCurl: (curl) => convertFromCurl(curl),
+});
+
+convertFromCurl(SAMPLE_CURL);
