@@ -1,0 +1,137 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Request Local · HuTu</title>
+  <link rel="stylesheet" href="/static/css/common.css">
+  <link rel="stylesheet" href="/static/css/tool.css">
+  <link rel="stylesheet" href="/static/css/request-local.css">
+</head>
+<body>
+  <header class="site-header">
+    <div class="header-inner">
+      <a class="site-logo" href="/">HuTu</a>
+      <nav class="site-nav">
+        <a class="nav-item" href="/">← 返回首页</a>
+      </nav>
+    </div>
+  </header>
+
+  <main class="container container-wide">
+    <div class="tool-header">
+      <h1>Request Local</h1>
+      <p class="subtitle">粘贴线上 curl，自动替换为本地 127.0.0.1 请求并发送查看响应</p>
+    </div>
+
+    <div class="port-bar">
+      <label for="port">默认端口</label>
+      <input type="number" id="port" value="8000" min="1" max="65535">
+      <button type="button" class="btn-secondary" id="open-mapping-btn">配置映射</button>
+      <span class="port-hint" id="port-hint" hidden></span>
+      <button type="button" class="btn-primary btn-accent" id="paste-send-btn">一键粘贴并发送</button>
+      <button type="button" class="btn-primary" id="convert-btn">转换</button>
+      <button type="button" class="btn-primary" id="send-btn">发送请求</button>
+      <span class="status-badge" id="status-badge" hidden></span>
+    </div>
+
+    <div class="panels panels-3">
+      <div class="panel">
+        <div class="panel-header">
+          <span>原始 curl</span>
+          <button type="button" class="btn-link" id="clear-input">清空</button>
+        </div>
+        <textarea id="curl-input" spellcheck="false" placeholder="粘贴 curl 命令..."></textarea>
+      </div>
+
+      <div class="panel">
+        <div class="panel-header">
+          <span>本地 curl</span>
+          <button type="button" class="btn-link" id="copy-local">复制</button>
+        </div>
+        <textarea id="local-curl" class="output-area" spellcheck="false" readonly placeholder="转换后的本地 curl"></textarea>
+      </div>
+
+      <div class="panel">
+        <div class="panel-header">
+          <span>响应</span>
+          <span class="panel-meta" id="response-meta"></span>
+        </div>
+        <textarea id="response-body" class="output-area response-area" spellcheck="false" readonly placeholder="响应内容将显示在这里"></textarea>
+      </div>
+    </div>
+
+    <div id="error" class="error" hidden></div>
+
+    <section class="history-section">
+      <div class="history-header">
+        <h2>发送历史</h2>
+        <button type="button" class="btn-secondary" id="clear-history">清空历史</button>
+      </div>
+      <div class="history-wrap">
+        <table class="history-table" id="history-table">
+          <thead>
+            <tr>
+              <th width="150">时间</th>
+              <th width="60">方法</th>
+              <th>URL</th>
+              <th width="70">状态</th>
+              <th width="70">耗时</th>
+              <th width="120">操作</th>
+            </tr>
+          </thead>
+          <tbody id="history-tbody"></tbody>
+        </table>
+        <div class="history-empty" id="history-empty" hidden>暂无发送记录</div>
+      </div>
+      <div class="history-pagination" id="history-pagination" hidden>
+        <span class="history-page-info" id="history-page-info"></span>
+        <div class="history-page-btns">
+          <button type="button" class="btn-page" id="history-prev">上一页</button>
+          <button type="button" class="btn-page" id="history-next">下一页</button>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <footer class="site-footer">
+    <p>请求通过 HuTu 服务转发至本地端口</p>
+  </footer>
+
+  <div class="modal-overlay" id="mapping-modal" hidden>
+    <div class="modal mapping-modal">
+      <div class="modal-header">
+        <h3>端口映射</h3>
+        <button type="button" class="modal-close" id="mapping-modal-close">&times;</button>
+      </div>
+      <div class="modal-body">
+        <p class="mapping-desc">域名匹配时优先使用映射端口，未匹配则使用默认端口</p>
+        <div class="mapping-add">
+          <input type="text" id="map-domain" placeholder="域名，如 v8api.k0v.cn" spellcheck="false">
+          <input type="number" id="map-port" placeholder="端口" min="1" max="65535" value="8000">
+          <button type="button" class="btn-secondary" id="add-mapping">添加映射</button>
+        </div>
+        <div class="mapping-wrap">
+          <table class="mapping-table" id="mapping-table">
+            <thead>
+              <tr>
+                <th>域名</th>
+                <th width="100">本地端口</th>
+                <th width="80">操作</th>
+              </tr>
+            </thead>
+            <tbody id="mapping-tbody"></tbody>
+          </table>
+          <div class="mapping-empty" id="mapping-empty">暂无映射，将使用默认端口</div>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn-primary" id="mapping-modal-done">完成</button>
+      </div>
+    </div>
+  </div>
+
+  <script src="/static/js/curl-convert.js"></script>
+  <script src="/static/js/request-local.js"></script>
+</body>
+</html>

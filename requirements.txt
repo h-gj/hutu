@@ -1,0 +1,2 @@
+# HuTu uses Python 3.10+ standard library only.
+# No third-party packages required to run server.py.

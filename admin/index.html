@@ -1,0 +1,125 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>管理后台 · HuTu</title>
+  <link rel="stylesheet" href="/static/css/common.css">
+  <link rel="stylesheet" href="/static/css/admin.css">
+</head>
+<body>
+  <header class="site-header">
+    <div class="header-inner">
+      <a class="site-logo" href="/">HuTu</a>
+      <nav class="site-nav">
+        <a class="nav-item" href="/">← 返回首页</a>
+        <span class="nav-item active">管理后台</span>
+        <span class="nav-item nav-user" id="nav-user"></span>
+        <button type="button" class="nav-item" id="logout-btn">退出</button>
+      </nav>
+    </div>
+  </header>
+
+  <main class="container">
+    <div class="admin-header">
+      <div>
+        <h1 class="page-title">管理后台</h1>
+        <p class="page-subtitle">配置工具卡片：Logo、标题、简介、跳转地址、分类</p>
+      </div>
+      <button type="button" class="btn-primary" id="save-all">保存全部</button>
+    </div>
+
+    <div id="flash" class="flash" hidden></div>
+
+  <!-- Categories -->
+    <section class="admin-section">
+      <div class="section-header">
+        <h2>导航分类</h2>
+        <button type="button" class="btn-secondary" id="add-category">+ 添加分类</button>
+      </div>
+      <div class="table-wrap">
+        <table class="admin-table" id="category-table">
+          <thead>
+            <tr>
+              <th>ID</th>
+              <th>名称</th>
+              <th width="100">操作</th>
+            </tr>
+          </thead>
+          <tbody id="category-tbody"></tbody>
+        </table>
+      </div>
+    </section>
+
+    <!-- Tools -->
+    <section class="admin-section">
+      <div class="section-header">
+        <h2>工具列表</h2>
+        <button type="button" class="btn-secondary" id="add-tool">+ 添加工具</button>
+      </div>
+      <div class="table-wrap">
+        <table class="admin-table" id="tool-table">
+          <thead>
+            <tr>
+              <th width="60">Logo</th>
+              <th>标题</th>
+              <th>简介</th>
+              <th>跳转地址</th>
+              <th>分类</th>
+              <th width="120">操作</th>
+            </tr>
+          </thead>
+          <tbody id="tool-tbody"></tbody>
+        </table>
+      </div>
+    </section>
+  </main>
+
+  <!-- Tool edit modal -->
+  <div class="modal-overlay" id="tool-modal" hidden>
+    <div class="modal">
+      <div class="modal-header">
+        <h3 id="modal-title">编辑工具</h3>
+        <button type="button" class="modal-close" id="modal-close">&times;</button>
+      </div>
+      <form id="tool-form" class="modal-body">
+        <input type="hidden" id="tool-id">
+        <div class="form-row">
+          <label for="tool-logo">Logo</label>
+          <div class="logo-field">
+            <div class="logo-preview" id="logo-preview">🔧</div>
+            <input type="text" id="tool-logo" placeholder="emoji 或短文本，如 {} 或 IP" maxlength="8">
+          </div>
+        </div>
+        <div class="form-row">
+          <label for="tool-title">标题</label>
+          <input type="text" id="tool-title" required placeholder="工具名称">
+        </div>
+        <div class="form-row">
+          <label for="tool-intro">简介</label>
+          <textarea id="tool-intro" rows="3" placeholder="简短描述"></textarea>
+        </div>
+        <div class="form-row">
+          <label for="tool-jump">跳转地址</label>
+          <input type="text" id="tool-jump" required placeholder="/tools/xxx/ 或 https://...">
+          <span class="form-hint">本地工具填 /tools/xxx/，第三方填完整 URL</span>
+        </div>
+        <div class="form-row">
+          <label for="tool-category">分类</label>
+          <select id="tool-category" required></select>
+        </div>
+      </form>
+      <div class="modal-footer">
+        <button type="button" class="btn-ghost" id="modal-cancel">取消</button>
+        <button type="button" class="btn-primary" id="modal-save">确定</button>
+      </div>
+    </div>
+  </div>
+
+  <footer class="site-footer">
+    <p>配置保存至 tools.json · 本地运行</p>
+  </footer>
+
+  <script src="/static/js/admin.js"></script>
+</body>
+</html>

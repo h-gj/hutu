@@ -1,0 +1,35 @@
+{
+  "categories": [
+    {"id": "all", "name": "全部"},
+    {"id": "format", "name": "数据格式"},
+    {"id": "text", "name": "文本工具"},
+    {"id": "dev", "name": "开发工具"},
+    {"id": "icgoo", "name": "icgoo工具"}
+  ],
+  "tools": [
+    {
+      "id": "dict-to-json",
+      "logo": "{}",
+      "title": "Dict to JSON",
+      "intro": "将 Python 字典转换为 JSON，支持 True/False/None、单引号等 Python 语法",
+      "jump_to": "/tools/dict-to-json/",
+      "category": "format"
+    },
+    {
+      "id": "ip-query",
+      "logo": "IP",
+      "title": "IP 查询",
+      "intro": "查询 IP 地址归属地、WHOIS 等信息",
+      "jump_to": "https://www.ipaddress.com/",
+      "category": "dev"
+    },
+    {
+      "id": "request-local",
+      "logo": "⇄",
+      "title": "Request Local",
+      "intro": "将线上 curl 转为本地请求，替换为 127.0.0.1 并直接发送查看响应",
+      "jump_to": "/tools/request-local/",
+      "category": "dev"
+    }
+  ]
+}

@@ -1,0 +1,93 @@
+.login-page {
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  background: linear-gradient(135deg, #16213e 0%, #0f3460 50%, #1a1a2e 100%);
+}
+
+.login-card {
+  background: #fff;
+  border-radius: 12px;
+  padding: 36px 32px;
+  width: 100%;
+  max-width: 400px;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.25);
+}
+
+.login-brand {
+  text-align: center;
+  margin-bottom: 28px;
+}
+
+.login-logo {
+  font-size: 2.5rem;
+  display: block;
+  margin-bottom: 8px;
+}
+
+.login-brand h1 {
+  font-size: 1.25rem;
+  font-weight: 700;
+  color: #16213e;
+}
+
+.login-brand p {
+  margin-top: 6px;
+  font-size: 0.875rem;
+  color: #888;
+}
+
+.login-form .form-row {
+  margin-bottom: 16px;
+}
+
+.login-form label {
+  display: block;
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: #444;
+  margin-bottom: 6px;
+}
+
+.login-form input {
+  width: 100%;
+  border: 1px solid #ddd;
+  border-radius: 6px;
+  padding: 10px 12px;
+  font-size: 0.95rem;
+}
+
+.login-form input:focus {
+  outline: none;
+  border-color: #0f3460;
+}
+
+.btn-block {
+  width: 100%;
+  margin-top: 8px;
+}
+
+.login-error {
+  padding: 10px 12px;
+  background: #fff5f5;
+  border: 1px solid #feb2b2;
+  border-radius: 6px;
+  color: #c53030;
+  font-size: 0.85rem;
+  margin-bottom: 12px;
+}
+
+.login-back {
+  display: block;
+  text-align: center;
+  margin-top: 20px;
+  font-size: 0.85rem;
+  color: #888;
+  text-decoration: none;
+}
+
+.login-back:hover {
+  color: #0f3460;
+}

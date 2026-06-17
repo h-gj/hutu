@@ -1,0 +1,61 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Dict to JSON · HuTu</title>
+  <link rel="stylesheet" href="/static/css/common.css">
+  <link rel="stylesheet" href="/static/css/tool.css">
+</head>
+<body>
+  <header class="site-header">
+    <div class="header-inner">
+      <a class="site-logo" href="/">HuTu</a>
+      <nav class="site-nav">
+        <a class="nav-item" href="/">← 返回首页</a>
+      </nav>
+    </div>
+  </header>
+
+  <main class="container">
+    <div class="tool-header">
+      <h1>Python Dictionary to JSON</h1>
+      <p class="subtitle">将 Python 字典转换为 JSON，支持 True/False/None、单引号等 Python 语法</p>
+    </div>
+
+    <div class="panels">
+      <div class="panel">
+        <div class="panel-header">
+          <span>Python Dict</span>
+          <button type="button" class="btn-link" id="clear-input">清空</button>
+        </div>
+        <textarea id="input" spellcheck="false" placeholder="例如：&#10;{&#10;  'name': 'ICGOO',&#10;  'active': True,&#10;  'count': None,&#10;  'items': [1, 2, 3]&#10;}"></textarea>
+      </div>
+
+      <div class="panel">
+        <div class="panel-header">
+          <span>JSON</span>
+          <button type="button" class="btn-link" id="copy-output">复制</button>
+        </div>
+        <textarea id="output" class="output-area" spellcheck="false" readonly placeholder="转换结果将显示在这里"></textarea>
+      </div>
+    </div>
+
+    <div class="actions">
+      <button type="button" class="btn-primary" id="convert">转换</button>
+      <label class="checkbox">
+        <input type="checkbox" id="auto-convert" checked>
+        输入时自动转换
+      </label>
+    </div>
+
+    <div id="error" class="error" hidden></div>
+  </main>
+
+  <footer class="site-footer">
+    <p>本地运行 · 无需访问国外网站</p>
+  </footer>
+
+  <script src="/static/js/dict-to-json.js"></script>
+</body>
+</html>
