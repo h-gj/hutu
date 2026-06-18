@@ -1,2 +1,6 @@
-# HuTu uses Python 3.10+ standard library only.
-# No third-party packages required to run server.py.
+# Core server (stdlib only)
+# python3 server.py
+
+# SQL tool optional dependencies
+sqlparse>=0.5.0
+sqlglot>=25.0.0

@@ -10,6 +10,7 @@ import os
 import re
 import time
 from curl_utils import parse_curl, send_request
+from sql_utils import process_sql
 from http.server import BaseHTTPRequestHandler, HTTPServer
 from urllib.parse import unquote
 
@@ -20,6 +21,10 @@ TOOLS_FILE = os.path.join(DIR, "tools.json")
 ADMIN_CONFIG_FILE = os.path.join(DIR, "admin_config.json")
 DEV_SUBMISSIONS_FILE = os.path.join(DIR, "dev_submissions.json")
 DEV_SUBMISSIONS_MAX = 100
+NOTES_DIR = os.path.join(DIR, "notes")
+NOTE_SLUG_RE = re.compile(r"^[a-z0-9]{3,32}$")
+RESERVED_PATHS = frozenset(("/", "/index.html", "/favicon.ico"))
+RESERVED_PREFIXES = ("/api/", "/static/", "/tools/", "/admin")
 COOKIE_NAME = "hutu_session"
 SESSION_MAX_AGE = 7 * 24 * 3600
 
@@ -123,6 +128,43 @@ def add_dev_submission(curl: str, submitter: str = "") -> dict:
     return entry
 
 
+def ensure_notes_dir():
+    os.makedirs(NOTES_DIR, exist_ok=True)
+
+
+def note_file_path(slug: str) -> str:
+    return os.path.join(NOTES_DIR, f"{slug}.txt")
+
+
+def load_note(slug: str) -> dict:
+    path = note_file_path(slug)
+    if not os.path.isfile(path):
+        return {"content": "", "updated_at": None}
+    with open(path, "r", encoding="utf-8") as f:
+        content = f.read()
+    return {"content": content, "updated_at": int(os.path.getmtime(path) * 1000)}
+
+
+def save_note(slug: str, content: str) -> int:
+    ensure_notes_dir()
+    path = note_file_path(slug)
+    tmp_path = f"{path}.tmp"
+    with open(tmp_path, "w", encoding="utf-8") as f:
+        f.write(content)
+    os.replace(tmp_path, path)
+    return int(time.time() * 1000)
+
+
+def is_note_slug_path(path: str) -> bool:
+    if path in RESERVED_PATHS:
+        return False
+    for prefix in RESERVED_PREFIXES:
+        if path.startswith(prefix):
+            return False
+    slug = path[1:] if path.startswith("/") else path
+    return bool(NOTE_SLUG_RE.match(slug))
+
+
 class Handler(BaseHTTPRequestHandler):
     def log_message(self, format, *args):
         pass
@@ -178,6 +220,14 @@ class Handler(BaseHTTPRequestHandler):
             self._json_response({"ok": True, "items": load_dev_submissions()})
             return
 
+        if path.startswith("/api/notes/"):
+            slug = path[len("/api/notes/"):].strip("/")
+            if not NOTE_SLUG_RE.match(slug):
+                self.send_error(404)
+                return
+            self._json_response({"ok": True, **load_note(slug)})
+            return
+
         if path in ("/", "/index.html"):
             self._serve_file("index.html", "text/html; charset=utf-8")
             return
@@ -208,6 +258,10 @@ class Handler(BaseHTTPRequestHandler):
             self._serve_file(os.path.join("tools", rel))
             return
 
+        if is_note_slug_path(path):
+            self._serve_file("tools/online-editor/editor.html", "text/html; charset=utf-8")
+            return
+
         self.send_error(404)
 
     def do_PUT(self):
@@ -217,6 +271,13 @@ class Handler(BaseHTTPRequestHandler):
                 self._json_response({"ok": False, "error": "未登录"}, status=401)
                 return
             self._handle_save_catalog()
+            return
+        if path.startswith("/api/notes/"):
+            slug = path[len("/api/notes/"):].strip("/")
+            if not NOTE_SLUG_RE.match(slug):
+                self.send_error(404)
+                return
+            self._handle_save_note(slug)
             return
         self.send_error(404)
 
@@ -235,6 +296,10 @@ class Handler(BaseHTTPRequestHandler):
             self._handle_dict_to_json()
             return
 
+        if path == "/api/sql-tool/process":
+            self._handle_sql_tool()
+            return
+
         if path == "/api/request-local/send":
             self._handle_request_local_send()
             return
@@ -243,7 +308,22 @@ class Handler(BaseHTTPRequestHandler):
             self._handle_request_local_submit_dev()
             return
 
+        if path.startswith("/api/notes/"):
+            slug = path[len("/api/notes/"):].strip("/")
+            if not NOTE_SLUG_RE.match(slug):
+                self.send_error(404)
+                return
+            self._handle_save_note(slug)
+            return
+
         self.send_error(404)
+
+    def do_OPTIONS(self):
+        self.send_response(204)
+        self.send_header("Allow", "GET, POST, PUT, OPTIONS")
+        self.send_header("Access-Control-Allow-Methods", "GET, POST, PUT, OPTIONS")
+        self.send_header("Access-Control-Allow-Headers", "Content-Type")
+        self.end_headers()
 
     def _handle_login(self):
         length = int(self.headers.get("Content-Length", 0))
@@ -316,6 +396,38 @@ class Handler(BaseHTTPRequestHandler):
         except Exception as e:
             self._json_response({"ok": False, "error": f"转换失败: {e}"})
 
+    def _handle_sql_tool(self):
+        length = int(self.headers.get("Content-Length", 0))
+        body = self.rfile.read(length).decode("utf-8")
+
+        try:
+            payload = json.loads(body)
+            sql = payload.get("sql", "")
+            dialect = payload.get("dialect", "mysql")
+            keyword_case = payload.get("keyword_case", "upper")
+            indent = payload.get("indent", 2)
+            do_format = payload.get("format", True)
+            do_validate = payload.get("validate", True)
+
+            result = process_sql(
+                sql,
+                dialect=dialect,
+                keyword_case=keyword_case,
+                indent=int(indent),
+                do_format=do_format,
+                do_validate=do_validate,
+            )
+            if not result.get("ok"):
+                self._json_response({"ok": False, "error": result.get("error", "处理失败")})
+                return
+            self._json_response({"ok": True, **result})
+        except RuntimeError as e:
+            self._json_response({"ok": False, "error": str(e)})
+        except json.JSONDecodeError as e:
+            self._json_response({"ok": False, "error": f"请求格式错误: {e}"})
+        except Exception as e:
+            self._json_response({"ok": False, "error": f"处理失败: {e}"})
+
     def _handle_request_local_send(self):
         length = int(self.headers.get("Content-Length", 0))
         body = self.rfile.read(length).decode("utf-8")
@@ -351,6 +463,24 @@ class Handler(BaseHTTPRequestHandler):
             self._json_response({"ok": False, "error": str(e)})
         except Exception as e:
             self._json_response({"ok": False, "error": f"提交失败: {e}"})
+
+    def _handle_save_note(self, slug: str):
+        length = int(self.headers.get("Content-Length", 0))
+        body = self.rfile.read(length).decode("utf-8")
+
+        try:
+            payload = json.loads(body)
+            content = payload.get("content", "")
+            if not isinstance(content, str):
+                raise ValueError("content 必须是字符串")
+            updated_at = save_note(slug, content)
+            self._json_response({"ok": True, "updated_at": updated_at})
+        except json.JSONDecodeError as e:
+            self._json_response({"ok": False, "error": f"请求格式错误: {e}"})
+        except (ValueError, TypeError) as e:
+            self._json_response({"ok": False, "error": str(e)})
+        except Exception as e:
+            self._json_response({"ok": False, "error": f"保存失败: {e}"})
 
     def _serve_file(self, rel_path: str, content_type: str = None):
         path = os.path.join(DIR, rel_path)

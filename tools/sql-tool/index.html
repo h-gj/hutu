@@ -1,0 +1,98 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>SQL 格式化 · HuTu</title>
+  <link rel="stylesheet" href="/static/css/common.css">
+  <link rel="stylesheet" href="/static/css/tool.css">
+  <link rel="stylesheet" href="/static/css/sql-tool.css">
+</head>
+<body>
+  <header class="site-header">
+    <div class="header-inner">
+      <a class="site-logo" href="/">HuTu</a>
+      <nav class="site-nav">
+        <a class="nav-item" href="/">← 返回首页</a>
+      </nav>
+    </div>
+  </header>
+
+  <main class="container container-wide">
+    <div class="tool-header">
+      <h1>SQL 格式化与检测</h1>
+      <p class="subtitle">格式化 SQL 语句，并检测语法错误（基于 sqlglot 方言解析）</p>
+    </div>
+
+    <div class="sql-options">
+      <label>
+        方言
+        <select id="dialect">
+          <option value="mysql">MySQL</option>
+          <option value="postgres">PostgreSQL</option>
+          <option value="sqlite">SQLite</option>
+          <option value="oracle">Oracle</option>
+          <option value="tsql">SQL Server</option>
+        </select>
+      </label>
+      <label>
+        关键字
+        <select id="keyword-case">
+          <option value="upper">大写 UPPER</option>
+          <option value="lower">小写 lower</option>
+          <option value="preserve">保持原样</option>
+        </select>
+      </label>
+      <label>
+        缩进
+        <select id="indent">
+          <option value="2" selected>2 空格</option>
+          <option value="4">4 空格</option>
+        </select>
+      </label>
+      <label class="checkbox sql-auto">
+        <input type="checkbox" id="auto-run" checked>
+        输入时自动处理
+      </label>
+    </div>
+
+    <div class="panels">
+      <div class="panel">
+        <div class="panel-header">
+          <span>SQL 输入</span>
+          <button type="button" class="btn-link" id="clear-input">清空</button>
+        </div>
+        <textarea id="input" spellcheck="false" placeholder="粘贴或输入 SQL，例如：&#10;select id,name from users where status=1 order by id desc limit 10;"></textarea>
+      </div>
+
+      <div class="panel">
+        <div class="panel-header">
+          <span>格式化结果</span>
+          <button type="button" class="btn-link" id="copy-output">复制</button>
+        </div>
+        <textarea id="output" class="output-area" spellcheck="false" readonly placeholder="格式化结果将显示在这里"></textarea>
+      </div>
+    </div>
+
+    <div class="actions">
+      <button type="button" class="btn-primary" id="run-btn">格式化并检测</button>
+    </div>
+
+    <section class="sql-validation" id="validation-section" hidden>
+      <div class="sql-validation-header">
+        <h2>语法检测</h2>
+        <span class="sql-status" id="validation-status"></span>
+      </div>
+      <ul class="sql-error-list" id="error-list"></ul>
+    </section>
+
+    <div id="error" class="error" hidden></div>
+  </main>
+
+  <footer class="site-footer">
+    <p>依赖 sqlparse（格式化）与 sqlglot（语法检测），首次使用请 pip install sqlparse sqlglot</p>
+  </footer>
+
+  <script src="/static/js/sql-tool.js"></script>
+</body>
+</html>

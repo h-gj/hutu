@@ -1,0 +1,25 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>笔记 · HuTu</title>
+  <link rel="stylesheet" href="/static/css/note-editor.css">
+</head>
+<body class="note-editor-body">
+  <header class="note-editor-bar">
+    <a class="note-editor-logo" href="/">HuTu</a>
+    <span class="note-editor-path" id="note-path"></span>
+    <div class="note-editor-actions">
+      <button type="button" class="note-btn" id="copy-link">复制链接</button>
+      <a class="note-btn" href="/tools/online-editor/">新建</a>
+      <span class="note-save-status" id="save-status"></span>
+    </div>
+  </header>
+
+  <textarea id="note-content" class="note-editor-textarea" spellcheck="false"
+            placeholder="开始输入…"></textarea>
+
+  <script src="/static/js/note-editor.js?v=3"></script>
+</body>
+</html>

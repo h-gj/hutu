@@ -324,6 +324,53 @@
   padding: 4px 10px;
   border-radius: 4px;
   font-weight: 600;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.status-badge.loading {
+  background: #e8f4f8;
+  color: #0f3460;
+}
+
+.status-spinner {
+  width: 12px;
+  height: 12px;
+  border: 2px solid rgba(15, 52, 96, 0.2);
+  border-top-color: #0f3460;
+  border-radius: 50%;
+  animation: hutu-spin 0.7s linear infinite;
+  flex-shrink: 0;
+}
+
+@keyframes hutu-spin {
+  to { transform: rotate(360deg); }
+}
+
+.response-section.is-loading .response-viewer-wrap {
+  position: relative;
+}
+
+.response-section.is-loading .response-viewer-wrap::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: rgba(30, 30, 30, 0.2);
+  z-index: 2;
+  pointer-events: none;
+  border-radius: 6px;
+}
+
+.preview-tab.has-values::after {
+  content: '';
+  display: inline-block;
+  width: 6px;
+  height: 6px;
+  margin-left: 6px;
+  border-radius: 50%;
+  background: #48bb78;
+  vertical-align: middle;
 }
 
 .status-badge.ok {
@@ -334,11 +381,6 @@
 .status-badge.err {
   background: #fed7d7;
   color: #c53030;
-}
-
-.status-badge.loading {
-  background: #e8f4f8;
-  color: #0f3460;
 }
 
 .request-preview-section {
@@ -380,10 +422,65 @@
   align-items: stretch;
 }
 
+.preview-send-wrap {
+  position: relative;
+  flex-shrink: 0;
+  min-width: 88px;
+}
+
 .preview-send-btn {
   flex-shrink: 0;
   padding: 10px 24px;
   white-space: nowrap;
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.preview-send-wrap.is-sending .preview-send-btn {
+  pointer-events: none;
+}
+
+.preview-send-wrap.is-sending .preview-send-btn::after {
+  content: '';
+  display: inline-block;
+  width: 14px;
+  height: 14px;
+  margin-left: 8px;
+  border: 2px solid rgba(255, 255, 255, 0.35);
+  border-top-color: #fff;
+  border-radius: 50%;
+  animation: hutu-spin 0.7s linear infinite;
+  vertical-align: middle;
+}
+
+.send-cancel-btn {
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  border: none;
+  border-radius: 6px;
+  padding: 10px 24px;
+  font-size: 0.9rem;
+  font-weight: 600;
+  color: #fff;
+  background: #c53030;
+  cursor: pointer;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.15s ease;
+}
+
+.preview-send-wrap.is-sending:hover .send-cancel-btn {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+.preview-send-wrap.is-sending:hover .preview-send-btn {
+  opacity: 0;
+}
+
+.send-cancel-btn:hover {
+  background: #9b2c2c;
 }
 
 .preview-method-select {
@@ -527,6 +624,83 @@
   background: #fff;
 }
 
+.body-type-bar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px 16px;
+  margin-bottom: 12px;
+  padding-bottom: 10px;
+  border-bottom: 1px solid #e8e8e8;
+}
+
+.body-type-option {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.85rem;
+  color: #444;
+  cursor: pointer;
+  user-select: none;
+}
+
+.body-type-option input[type="radio"] {
+  cursor: pointer;
+}
+
+.body-sub-panel {
+  min-height: 80px;
+}
+
+.body-none-hint {
+  color: #888;
+  font-size: 0.875rem;
+  padding: 16px 0;
+  margin: 0;
+}
+
+.raw-type-bar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 8px;
+  font-size: 0.85rem;
+}
+
+.raw-type-bar select {
+  border: 1px solid #ddd;
+  border-radius: 4px;
+  padding: 4px 8px;
+  font-size: 0.85rem;
+}
+
+.binary-upload {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 0;
+}
+
+.binary-name {
+  font-size: 0.85rem;
+  color: #666;
+}
+
+.graphql-label {
+  display: block;
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: #666;
+  margin: 8px 0 4px;
+}
+
+.graphql-query {
+  min-height: 100px;
+}
+
+.graphql-vars {
+  min-height: 80px;
+}
+
 .preview-body-input {
   width: 100%;
   min-height: 140px;
@@ -571,6 +745,139 @@
   color: #888;
 }
 
+.response-viewer-wrap {
+  border: 1px solid #2d2d2d;
+  border-radius: 6px;
+  background: #1e1e1e;
+  min-height: 280px;
+  max-height: 560px;
+  overflow: hidden;
+}
+
+.response-viewer {
+  min-height: 280px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Courier New', monospace;
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.response-viewer-empty {
+  min-height: 280px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #858585;
+  font-size: 0.875rem;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+}
+
+.response-viewer-empty[hidden] {
+  display: none !important;
+}
+
+.response-viewer-scroll {
+  max-height: 560px;
+  overflow: auto;
+}
+
+.response-viewer-scroll[hidden] {
+  display: none !important;
+}
+
+.response-viewer-lines {
+  padding: 8px 0;
+}
+
+.rv-line {
+  display: flex;
+  align-items: flex-start;
+  min-height: 20px;
+  white-space: pre;
+}
+
+.rv-line:hover {
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.rv-fold,
+.rv-fold-spacer {
+  flex-shrink: 0;
+  width: 20px;
+  height: 20px;
+  margin-left: 4px;
+}
+
+.rv-fold {
+  border: none;
+  background: transparent;
+  cursor: pointer;
+  position: relative;
+  padding: 0;
+}
+
+.rv-fold::before {
+  content: '';
+  display: block;
+  width: 0;
+  height: 0;
+  margin: 6px auto 0;
+  border-top: 5px solid transparent;
+  border-bottom: 5px solid transparent;
+  border-left: 6px solid #858585;
+  transition: transform 0.12s ease;
+}
+
+.rv-fold:not(.collapsed)::before {
+  transform: rotate(90deg);
+  margin-top: 7px;
+}
+
+.rv-fold:hover::before {
+  border-left-color: #ccc;
+}
+
+.rv-ln {
+  flex-shrink: 0;
+  width: 40px;
+  padding-right: 12px;
+  text-align: right;
+  color: #858585;
+  user-select: none;
+  border-right: 1px solid #333;
+  margin-right: 12px;
+}
+
+.rv-code {
+  flex: 1;
+  color: #d4d4d4;
+  padding-right: 12px;
+  white-space: pre;
+}
+
+.rv-key {
+  color: #9cdcfe;
+}
+
+.rv-string {
+  color: #ce9178;
+}
+
+.rv-number {
+  color: #b5cea8;
+}
+
+.rv-bool {
+  color: #569cd6;
+}
+
+.rv-null {
+  color: #569cd6;
+}
+
+.rv-punct {
+  color: #d4d4d4;
+}
+
 .response-body {
   width: 100%;
   min-height: 280px;
@@ -582,6 +889,10 @@
   resize: vertical;
   box-sizing: border-box;
   background: #f6f8fa;
+}
+
+.postbuman-actions {
+  margin-bottom: 20px;
 }
 
 .history-section {

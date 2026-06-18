@@ -1,4 +1,4 @@
-const responseBody = document.getElementById('response-body');
+const responseViewer = ResponseViewer.create(document.getElementById('response-viewer'));
 const responseMeta = document.getElementById('response-meta');
 const portInput = document.getElementById('port');
 const errorEl = document.getElementById('error');
@@ -58,9 +58,18 @@ function hideError() {
 }
 
 function setBadge(text, type) {
-  statusBadge.textContent = text;
-  statusBadge.className = `status-badge ${type}`;
+  if (type === 'loading') {
+    statusBadge.innerHTML = '<span class="status-spinner" aria-hidden="true"></span><span>发送中...</span>';
+    statusBadge.className = 'status-badge loading';
+  } else {
+    statusBadge.textContent = text;
+    statusBadge.className = `status-badge ${type}`;
+  }
   statusBadge.hidden = false;
+}
+
+function setSending(active) {
+  RequestSendUI.setSending(active);
 }
 
 function getPort() {
@@ -486,11 +495,11 @@ async function viewHistory(id) {
     const statusClass = item.status >= 200 && item.status < 300 ? 'ok' : 'err';
     setBadge(String(item.status), statusClass);
     responseMeta.textContent = item.elapsed_ms != null ? `${item.elapsed_ms} ms` : '';
-    responseBody.value = item.body || '';
+    responseViewer.setText(item.body || '');
   } else {
     statusBadge.hidden = true;
     responseMeta.textContent = '';
-    responseBody.value = item.error || item.body || '';
+    responseViewer.setText(item.error || item.body || '');
   }
 
   if (!lastRequest && lastOriginalCurl) {
@@ -517,7 +526,7 @@ function viewServerSubmission(id) {
   lastOriginalCurl = item.curl || '';
   statusBadge.hidden = true;
   responseMeta.textContent = '';
-  responseBody.value = '';
+  responseViewer.clear();
   lastRequest = null;
   convertFromCurl(lastOriginalCurl);
   hideError();
@@ -555,23 +564,27 @@ async function sendRequest() {
     return;
   }
 
-  setBadge('发送中...', 'loading');
-  responseBody.value = '';
+  setSending(true);
+  setBadge('', 'loading');
+  responseViewer.clear();
   responseMeta.textContent = '';
   hideError();
+
+  const signal = RequestSendUI.createSignal();
 
   try {
     const res = await fetch('/api/request-local/send', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ request: lastRequest }),
+      signal,
     });
     const data = await res.json();
 
     if (!data.ok) {
       setBadge('失败', 'err');
       showError(data.error || '请求失败');
-      responseBody.value = data.error || '';
+      responseViewer.setText(data.error || '');
       recordSendResult(data);
       return;
     }
@@ -579,13 +592,21 @@ async function sendRequest() {
     const statusClass = data.status >= 200 && data.status < 300 ? 'ok' : 'err';
     setBadge(`${data.status}`, statusClass);
     responseMeta.textContent = `${data.elapsed_ms} ms`;
-    responseBody.value = data.body || '';
+    responseViewer.setText(data.body || '');
     hideError();
     recordSendResult(data);
-  } catch {
+  } catch (err) {
+    if (RequestSendUI.isAbortError(err)) {
+      setBadge('已取消', 'err');
+      showError('请求已取消');
+      return;
+    }
     setBadge('失败', 'err');
     showError('发送请求失败');
     recordSendResult({ ok: false, error: '发送请求失败' });
+  } finally {
+    RequestSendUI.clearAbort();
+    setSending(false);
   }
 }
 
@@ -772,7 +793,7 @@ document.getElementById('clear-preview').addEventListener('click', () => {
   lastUsedPort = null;
   updatePortHint(null, null);
   RequestPreview.clear();
-  responseBody.value = '';
+  responseViewer.clear();
   responseMeta.textContent = '';
   statusBadge.hidden = true;
   hideError();
@@ -820,6 +841,8 @@ loadPort();
 loadPortMappings();
 loadHistory();
 loadServerHistory();
+
+RequestSendUI.init();
 
 RequestPreview.init({
   onChange: (request) => applyPreviewRequest(request),

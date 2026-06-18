@@ -1,0 +1,52 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>在线记事本 · HuTu</title>
+  <link rel="stylesheet" href="/static/css/common.css">
+  <link rel="stylesheet" href="/static/css/tool.css">
+  <link rel="stylesheet" href="/static/css/note-editor.css">
+</head>
+<body class="note-landing-body">
+  <header class="site-header">
+    <div class="header-inner">
+      <a class="site-logo" href="/">HuTu</a>
+      <nav class="site-nav">
+        <a class="nav-item" href="/">← 返回首页</a>
+      </nav>
+    </div>
+  </header>
+
+  <main class="container note-landing">
+    <div class="tool-header">
+      <h1>在线记事本</h1>
+      <p class="subtitle">轻量在线记事本，灵感来自 <a href="https://note.ms/" target="_blank" rel="noopener">note.ms</a></p>
+    </div>
+
+    <div class="note-landing-card">
+      <ul class="note-landing-list">
+        <li>进入时会分配一个<strong>随机短地址</strong>，例如 <code>/fsdf</code></li>
+        <li>编辑内容<strong>自动保存</strong>到本地，无需手动点保存</li>
+        <li>复制地址栏链接即可分享，他人打开同一地址看到相同内容</li>
+        <li>数据保存在本机，适合临时备忘、草稿与协作片段</li>
+      </ul>
+
+      <div class="note-landing-actions">
+        <button type="button" class="btn-primary" id="start-new-note">开始写作</button>
+        <div class="note-open-row">
+          <label for="open-slug">打开已有笔记</label>
+          <input type="text" id="open-slug" placeholder="输入地址名，如 fsdf" spellcheck="false" maxlength="32">
+          <button type="button" class="btn-secondary" id="open-note">打开</button>
+        </div>
+      </div>
+    </div>
+  </main>
+
+  <footer class="site-footer">
+    <p>笔记保存在本地 notes 目录</p>
+  </footer>
+
+  <script src="/static/js/note-landing.js"></script>
+</body>
+</html>

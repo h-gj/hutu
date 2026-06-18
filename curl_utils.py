@@ -190,10 +190,15 @@ def send_request(request: dict, timeout: int = 30) -> dict:
     method = request.get("method", "GET").upper()
     headers = request.get("headers") or {}
     body = request.get("body")
+    body_encoding = request.get("body_encoding", "utf-8")
 
     data = None
     if body is not None:
-        data = body.encode("utf-8")
+        if body_encoding == "base64":
+            import base64
+            data = base64.b64decode(body)
+        else:
+            data = body.encode("utf-8")
 
     req = urllib.request.Request(url, data=data, method=method)
     for name, value in headers.items():

@@ -12,6 +12,9 @@ env/
 admin_config.json
 dev_submissions.json
 
+# Local notes
+notes/
+
 # IDE
 .idea/
 .vscode/

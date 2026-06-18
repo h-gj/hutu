@@ -1,20 +1,43 @@
 /** Postman-style editable request preview (params / headers / body). */
 const RequestPreview = (() => {
   const METHODS = ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'HEAD', 'OPTIONS'];
+  const BODY_TYPES = ['none', 'form-data', 'urlencoded', 'raw', 'binary', 'graphql'];
+  const RAW_CONTENT_TYPES = {
+    json: 'application/json',
+    text: 'text/plain',
+    javascript: 'application/javascript',
+    html: 'text/html',
+    xml: 'application/xml',
+  };
 
   let onChange = null;
   let activeTab = 'params';
   let paramRows = [];
   let headerRows = [];
+  let formDataRows = [];
+  let urlencodedRows = [];
+  let bodyType = 'none';
+  let rawSubtype = 'json';
+  let binaryBase64 = '';
+  let binaryFilename = '';
   let syncTimer = null;
+  let urlSyncLock = false;
+  let urlInputTimer = null;
 
-  const section = document.getElementById('request-preview-section');
   const methodSelect = document.getElementById('preview-method');
   const urlInput = document.getElementById('preview-url');
   const bodyInput = document.getElementById('preview-body-input');
   const paramsTbody = document.getElementById('preview-params-tbody');
   const headersTbody = document.getElementById('preview-headers-tbody');
   const headersTabBtn = document.getElementById('preview-tab-headers');
+  const paramsTabBtn = document.getElementById('preview-tab-params');
+  const formDataTbody = document.getElementById('preview-formdata-tbody');
+  const urlencodedTbody = document.getElementById('preview-urlencoded-tbody');
+  const rawTypeSelect = document.getElementById('preview-raw-type');
+  const binaryFileInput = document.getElementById('preview-binary-file');
+  const binaryNameEl = document.getElementById('preview-binary-name');
+  const graphqlQueryInput = document.getElementById('preview-graphql-query');
+  const graphqlVarsInput = document.getElementById('preview-graphql-vars');
 
   function escapeHtml(str) {
     return String(str)
@@ -24,11 +47,7 @@ const RequestPreview = (() => {
       .replace(/"/g, '&quot;');
   }
 
-  function emptyParamRow() {
-    return { key: '', value: '', enabled: true };
-  }
-
-  function emptyHeaderRow() {
+  function emptyKvRow() {
     return { key: '', value: '', enabled: true };
   }
 
@@ -36,36 +55,145 @@ const RequestPreview = (() => {
     const rows = [];
     try {
       const u = new URL(url);
-      u.searchParams.forEach((value, key) => {
-        rows.push({ key, value, enabled: true });
-      });
-    } catch {
-      /* ignore */
-    }
-    rows.push(emptyParamRow());
+      u.searchParams.forEach((value, key) => rows.push({ key, value, enabled: true }));
+    } catch { /* ignore */ }
+    rows.push(emptyKvRow());
     return rows;
   }
 
   function parseHeadersFromObject(headers) {
     const rows = Object.entries(headers || {}).map(([key, value]) => ({
-      key,
-      value,
-      enabled: true,
+      key, value, enabled: true,
     }));
-    rows.push(emptyHeaderRow());
+    rows.push(emptyKvRow());
     return rows;
   }
 
-  function ensureTrailingEmptyRow(rows, emptyFactory) {
-    const last = rows[rows.length - 1];
-    if (!last || last.key || last.value) {
-      rows.push(emptyFactory());
+  function parseUrlencodedBody(text) {
+    const rows = [];
+    try {
+      const params = new URLSearchParams(text);
+      params.forEach((value, key) => rows.push({ key, value, enabled: true }));
+    } catch { /* ignore */ }
+    rows.push(emptyKvRow());
+    return rows;
+  }
+
+  function decodeCurlEscapes(str) {
+    return String(str)
+      .replace(/\\r/g, '\r')
+      .replace(/\\n/g, '\n')
+      .replace(/\\t/g, '\t')
+      .replace(/\\'/g, "'")
+      .replace(/\\"/g, '"')
+      .replace(/\\\\/g, '\\');
+  }
+
+  function normalizeBodyText(body) {
+    if (!body) return body;
+    let t = body.trim();
+    if (t.startsWith("$'") && t.endsWith("'")) {
+      t = decodeCurlEscapes(t.slice(2, -1));
+    } else if (t.startsWith("'") && t.endsWith("'")) {
+      t = decodeCurlEscapes(t.slice(1, -1));
+    } else if (t.startsWith('"') && t.endsWith('"')) {
+      t = decodeCurlEscapes(t.slice(1, -1));
     }
+    if (t.includes('\\r') || t.includes('\\n') || t.includes('\\t')) {
+      t = decodeCurlEscapes(t);
+    }
+    return t;
+  }
+
+  function parseMultipartBody(text, contentType) {
+    const rows = [];
+    const normalized = normalizeBodyText(text);
+    if (!normalized) return rows;
+
+    let boundary = null;
+    const ctMatch = (contentType || '').match(/boundary=([^;\s]+)/i);
+    if (ctMatch) boundary = ctMatch[1].replace(/^["']|["']$/g, '');
+    if (!boundary) {
+      const startMatch = normalized.match(/^--([^\r\n]+)/);
+      boundary = startMatch?.[1];
+    }
+    if (!boundary) return rows;
+
+    normalized.split(`--${boundary}`).forEach(segment => {
+      const trimmed = segment.replace(/^\r\n/, '').replace(/\r\n$/, '');
+      if (!trimmed || trimmed === '--') return;
+      const nameMatch = trimmed.match(/name="([^"]+)"/i) || trimmed.match(/name=([^;\r\n]+)/i);
+      if (!nameMatch) return;
+      const key = nameMatch[1].trim().replace(/^["']|["']$/g, '');
+      let bodyStart = trimmed.search(/\r\n\r\n/);
+      if (bodyStart < 0) bodyStart = trimmed.indexOf('\\r\\n\\r\\n');
+      if (bodyStart < 0) bodyStart = trimmed.indexOf('\n\n');
+      if (bodyStart < 0) return;
+      const sepLen = trimmed.slice(bodyStart).startsWith('\\r\\n\\r\\n') ? 8
+        : trimmed.slice(bodyStart).startsWith('\n\n') ? 2
+        : 4;
+      let value = trimmed.slice(bodyStart + sepLen);
+      value = value.replace(/\r\n--$/, '').replace(/\r\n$/, '').replace(/\\r\\n--$/, '').replace(/\\r\\n$/, '').trim();
+      const fileMatch = trimmed.match(/filename="([^"]+)"/i);
+      if (fileMatch) value = `@${fileMatch[1]}`;
+      rows.push({ key, value, enabled: true });
+    });
+
+    if (rows.length) rows.push(emptyKvRow());
+    return rows;
+  }
+
+  function ensureTrailingEmptyRow(rows) {
+    const last = rows[rows.length - 1];
+    if (!last || last.key || last.value) rows.push(emptyKvRow());
+  }
+
+  function getContentType(headers) {
+    const entry = Object.entries(headers || {}).find(([k]) => k.toLowerCase() === 'content-type');
+    return entry ? entry[1] : '';
+  }
+
+  function setBodyType(type) {
+    bodyType = BODY_TYPES.includes(type) ? type : 'none';
+    document.querySelectorAll('input[name="body-type"]').forEach(radio => {
+      radio.checked = radio.value === bodyType;
+    });
+    BODY_TYPES.forEach(t => {
+      const panel = document.getElementById(`body-panel-${t}`);
+      if (panel) panel.hidden = t !== bodyType;
+    });
   }
 
   function updateHeaderTabCount() {
     const count = headerRows.filter(h => h.enabled && h.key).length;
     headersTabBtn.textContent = count ? `Headers (${count})` : 'Headers';
+  }
+
+  function updateParamsTabCount() {
+    if (!paramsTabBtn) return;
+    const count = paramRows.filter(p => p.enabled && p.key).length;
+    paramsTabBtn.textContent = count ? `Params (${count})` : 'Params';
+    paramsTabBtn.classList.toggle('has-values', count > 0);
+  }
+
+  function normalizeUrlString(url) {
+    const text = (url || '').trim();
+    if (!text) return text;
+    if (/^https?:\/\//i.test(text)) return text;
+    return `http://${text}`;
+  }
+
+  function getUrlWithoutQuery(url) {
+    try {
+      const u = new URL(normalizeUrlString(url));
+      u.search = '';
+      u.hash = '';
+      return u.toString();
+    } catch {
+      const noHash = (url || '').split('#')[0];
+      const idx = noHash.indexOf('?');
+      return idx >= 0 ? noHash.slice(0, idx) : noHash;
+    }
   }
 
   function switchTab(tab) {
@@ -78,25 +206,38 @@ const RequestPreview = (() => {
     });
   }
 
+  function applyParamsToUrl() {
+    const base = getUrlWithoutQuery(urlInput.value) || urlInput.value.trim();
+    const url = buildUrlWithParams(base, paramRows);
+    urlSyncLock = true;
+    urlInput.value = url;
+    urlSyncLock = false;
+    const req = buildRequest();
+    if (onChange) onChange(req);
+    return req;
+  }
+
   function scheduleSync() {
     clearTimeout(syncTimer);
-    syncTimer = setTimeout(() => {
-      const req = buildRequest();
-      urlInput.value = req.url;
-      if (onChange) onChange(req);
-    }, 200);
+    syncTimer = setTimeout(() => applyParamsToUrl(), 200);
   }
 
   function syncNow() {
     clearTimeout(syncTimer);
-    const req = buildRequest();
-    urlInput.value = req.url;
-    if (onChange) onChange(req);
+    applyParamsToUrl();
+  }
+
+  function applyUrlToParams() {
+    if (urlSyncLock) return;
+    paramRows = parseParamsFromUrl(urlInput.value);
+    renderParamRows();
+    updateParamsTabCount();
+    applyParamsToUrl();
   }
 
   function buildUrlWithParams(baseUrl, rows) {
     try {
-      const u = new URL(baseUrl);
+      const u = new URL(normalizeUrlString(baseUrl));
       const params = new URLSearchParams();
       rows.forEach(row => {
         if (row.enabled && row.key) params.append(row.key, row.value);
@@ -108,84 +249,240 @@ const RequestPreview = (() => {
     }
   }
 
+  function buildMultipartBody(rows) {
+    const boundary = `----HuTu${Date.now().toString(16)}`;
+    const parts = [];
+    rows.filter(r => r.enabled && r.key).forEach(row => {
+      parts.push(
+        `--${boundary}\r\nContent-Disposition: form-data; name="${row.key}"\r\n\r\n${row.value}\r\n`
+      );
+    });
+    parts.push(`--${boundary}--\r\n`);
+    return { body: parts.join(''), contentType: `multipart/form-data; boundary=${boundary}` };
+  }
+
+  function buildUrlencodedBody(rows) {
+    const params = new URLSearchParams();
+    rows.filter(r => r.enabled && r.key).forEach(r => params.append(r.key, r.value));
+    return { body: params.toString(), contentType: 'application/x-www-form-urlencoded' };
+  }
+
+  function applyHeaderUpdate(headers, name, value) {
+    const existing = Object.keys(headers).find(k => k.toLowerCase() === name.toLowerCase());
+    if (existing) headers[existing] = value;
+    else headers[name] = value;
+  }
+
+  function removeHeader(headers, name) {
+    const existing = Object.keys(headers).find(k => k.toLowerCase() === name.toLowerCase());
+    if (existing) delete headers[existing];
+  }
+
+  function buildBodyPayload() {
+    switch (bodyType) {
+      case 'form-data': {
+        const { body, contentType } = buildMultipartBody(formDataRows);
+        return { body: body || null, body_encoding: 'utf-8', contentType: body ? contentType : null };
+      }
+      case 'urlencoded': {
+        const { body, contentType } = buildUrlencodedBody(urlencodedRows);
+        return { body: body || null, body_encoding: 'utf-8', contentType: body ? contentType : null };
+      }
+      case 'raw': {
+        const text = bodyInput.value;
+        const ct = RAW_CONTENT_TYPES[rawSubtype] || 'text/plain';
+        return { body: text || null, body_encoding: 'utf-8', contentType: text ? ct : null };
+      }
+      case 'binary': {
+        return {
+          body: binaryBase64 || null,
+          body_encoding: 'base64',
+          contentType: binaryBase64 ? 'application/octet-stream' : null,
+        };
+      }
+      case 'graphql': {
+        let variables = {};
+        const varsText = graphqlVarsInput.value.trim();
+        if (varsText) {
+          try { variables = JSON.parse(varsText); } catch { variables = {}; }
+        }
+        const payload = JSON.stringify({ query: graphqlQueryInput.value, variables });
+        const hasContent = graphqlQueryInput.value.trim();
+        return {
+          body: hasContent ? payload : null,
+          body_encoding: 'utf-8',
+          contentType: hasContent ? 'application/json' : null,
+        };
+      }
+      default:
+        return { body: null, body_encoding: 'utf-8', contentType: null };
+    }
+  }
+
   function buildRequest() {
     const method = methodSelect.value || 'GET';
-    const url = buildUrlWithParams(urlInput.value, paramRows);
+    const base = getUrlWithoutQuery(urlInput.value) || urlInput.value.trim();
+    const url = buildUrlWithParams(base, paramRows);
     const headers = {};
     headerRows.forEach(row => {
       if (row.enabled && row.key) headers[row.key] = row.value;
     });
-    const bodyText = bodyInput.value;
-    const body = bodyText ? bodyText : null;
-    return { url, method, headers, body };
+
+    const bodyPayload = buildBodyPayload();
+    if (bodyPayload.contentType) {
+      applyHeaderUpdate(headers, 'Content-Type', bodyPayload.contentType);
+    } else if (bodyType === 'none') {
+      removeHeader(headers, 'Content-Type');
+    }
+
+    return {
+      url,
+      method,
+      headers,
+      body: bodyPayload.body,
+      body_encoding: bodyPayload.body_encoding,
+      bodyMeta: getBodyMetaSnapshot(),
+    };
   }
 
-  function renderParamRows() {
-    ensureTrailingEmptyRow(paramRows, emptyParamRow);
-    paramsTbody.innerHTML = paramRows.map((row, idx) => `
+  function getBodyMetaSnapshot() {
+    return {
+      type: bodyType,
+      rawSubtype,
+      formRows: bodyType === 'form-data' ? formDataRows.filter(r => r.key || r.value) : [],
+      urlencodedRows: bodyType === 'urlencoded' ? urlencodedRows.filter(r => r.key || r.value) : [],
+      rawText: bodyType === 'raw' ? bodyInput.value : '',
+      binaryBase64: bodyType === 'binary' ? binaryBase64 : '',
+      binaryFilename: bodyType === 'binary' ? binaryFilename : '',
+      graphqlQuery: bodyType === 'graphql' ? graphqlQueryInput.value : '',
+      graphqlVariables: bodyType === 'graphql' ? graphqlVarsInput.value : '',
+    };
+  }
+
+  function renderKvTable(tbody, rows, prefix) {
+    ensureTrailingEmptyRow(rows);
+    tbody.innerHTML = rows.map((row, idx) => `
       <tr>
         <td class="preview-check-col">
-          <input type="checkbox" data-param-idx="${idx}" data-field="enabled" ${row.enabled ? 'checked' : ''}>
+          <input type="checkbox" data-${prefix}-idx="${idx}" data-field="enabled" ${row.enabled ? 'checked' : ''}>
         </td>
         <td>
-          <input type="text" class="preview-cell-input" data-param-idx="${idx}" data-field="key"
+          <input type="text" class="preview-cell-input" data-${prefix}-idx="${idx}" data-field="key"
                  value="${escapeHtml(row.key)}" placeholder="Key" spellcheck="false">
         </td>
         <td>
-          <input type="text" class="preview-cell-input" data-param-idx="${idx}" data-field="value"
+          <input type="text" class="preview-cell-input" data-${prefix}-idx="${idx}" data-field="value"
                  value="${escapeHtml(row.value)}" placeholder="Value" spellcheck="false">
         </td>
       </tr>
     `).join('');
   }
 
-  function renderHeaderRows() {
-    ensureTrailingEmptyRow(headerRows, emptyHeaderRow);
-    headersTbody.innerHTML = headerRows.map((row, idx) => `
-      <tr>
-        <td class="preview-check-col">
-          <input type="checkbox" data-header-idx="${idx}" data-field="enabled" ${row.enabled ? 'checked' : ''}>
-        </td>
-        <td>
-          <input type="text" class="preview-cell-input" data-header-idx="${idx}" data-field="key"
-                 value="${escapeHtml(row.key)}" placeholder="Key" spellcheck="false">
-        </td>
-        <td>
-          <input type="text" class="preview-cell-input" data-header-idx="${idx}" data-field="value"
-                 value="${escapeHtml(row.value)}" placeholder="Value" spellcheck="false">
-        </td>
-      </tr>
-    `).join('');
-    updateHeaderTabCount();
-  }
+  function renderParamRows() { renderKvTable(paramsTbody, paramRows, 'param'); }
+  function renderHeaderRows() { renderKvTable(headersTbody, headerRows, 'header'); updateHeaderTabCount(); }
+  function renderFormDataRows() { renderKvTable(formDataTbody, formDataRows, 'formdata'); }
+  function renderUrlencodedRows() { renderKvTable(urlencodedTbody, urlencodedRows, 'urlencoded'); }
 
-  function updateParamField(idx, field, value) {
-    const row = paramRows[idx];
+  function updateKvField(rows, renderFn, idx, field, value, prefix) {
+    const row = rows[idx];
     if (!row) return;
     if (field === 'enabled') row.enabled = value;
     else row[field] = value;
     if (field === 'key' || field === 'value') {
-      ensureTrailingEmptyRow(paramRows, emptyParamRow);
-      if (idx === paramRows.length - 2 && (row.key || row.value)) {
-        renderParamRows();
-      }
+      ensureTrailingEmptyRow(rows);
+      if (idx === rows.length - 2 && (row.key || row.value)) renderFn();
     }
-    scheduleSync();
+    if (prefix === 'param') {
+      updateParamsTabCount();
+      syncNow();
+    } else if (prefix === 'header') {
+      updateHeaderTabCount();
+      scheduleSync();
+    } else {
+      scheduleSync();
+    }
   }
 
-  function updateHeaderField(idx, field, value) {
-    const row = headerRows[idx];
-    if (!row) return;
-    if (field === 'enabled') row.enabled = value;
-    else row[field] = value;
-    if (field === 'key' || field === 'value') {
-      ensureTrailingEmptyRow(headerRows, emptyHeaderRow);
-      if (idx === headerRows.length - 2 && (row.key || row.value)) {
-        renderHeaderRows();
+  function applyBodyMeta(meta, body) {
+    setBodyType(meta.type || 'none');
+    rawSubtype = meta.rawSubtype || 'json';
+    if (rawTypeSelect) rawTypeSelect.value = rawSubtype;
+
+    if (meta.type === 'form-data') {
+      formDataRows = (meta.formRows || []).map(r => ({ ...r }));
+      ensureTrailingEmptyRow(formDataRows);
+      renderFormDataRows();
+    } else if (meta.type === 'urlencoded') {
+      urlencodedRows = (meta.urlencodedRows || []).map(r => ({ ...r }));
+      ensureTrailingEmptyRow(urlencodedRows);
+      renderUrlencodedRows();
+    } else if (meta.type === 'raw') {
+      bodyInput.value = body || meta.rawText || '';
+    } else if (meta.type === 'binary') {
+      binaryBase64 = meta.binaryBase64 || '';
+      binaryFilename = meta.binaryFilename || '';
+      if (binaryNameEl) binaryNameEl.textContent = binaryFilename || '未选择文件';
+    } else if (meta.type === 'graphql') {
+      graphqlQueryInput.value = meta.graphqlQuery || '';
+      graphqlVarsInput.value = meta.graphqlVariables || '{}';
+    }
+  }
+
+  function inferBodyFromRequest(request) {
+    const headers = request.headers || {};
+    const body = request.body;
+    const ct = getContentType(headers);
+
+    if (request.bodyMeta?.type) {
+      applyBodyMeta(request.bodyMeta, body);
+      return;
+    }
+
+    if (!body) {
+      setBodyType('none');
+      return;
+    }
+
+    const normalizedBody = normalizeBodyText(body);
+
+    if (ct.includes('multipart/form-data') || normalizedBody.includes('Content-Disposition: form-data')) {
+      const parsed = parseMultipartBody(normalizedBody, ct);
+      if (parsed.length) {
+        setBodyType('form-data');
+        formDataRows = parsed;
+        renderFormDataRows();
+        return;
       }
     }
-    updateHeaderTabCount();
-    scheduleSync();
+
+    if (ct.includes('application/x-www-form-urlencoded')) {
+      setBodyType('urlencoded');
+      urlencodedRows = parseUrlencodedBody(normalizedBody);
+      renderUrlencodedRows();
+      return;
+    }
+
+    if (ct.includes('application/graphql') || (normalizedBody.includes('query') && normalizedBody.trim().startsWith('{'))) {
+      try {
+        const parsed = JSON.parse(normalizedBody);
+        if (parsed.query) {
+          setBodyType('graphql');
+          graphqlQueryInput.value = parsed.query;
+          graphqlVarsInput.value = JSON.stringify(parsed.variables || {}, null, 2);
+          return;
+        }
+      } catch { /* fall through */ }
+    }
+
+    setBodyType('raw');
+    bodyInput.value = normalizedBody;
+    if (ct.includes('json')) rawSubtype = 'json';
+    else if (ct.includes('javascript')) rawSubtype = 'javascript';
+    else if (ct.includes('html')) rawSubtype = 'html';
+    else if (ct.includes('xml')) rawSubtype = 'xml';
+    else if (normalizedBody.trim().startsWith('{') || normalizedBody.trim().startsWith('[')) rawSubtype = 'json';
+    else rawSubtype = 'text';
+    if (rawTypeSelect) rawTypeSelect.value = rawSubtype;
   }
 
   function populate(request) {
@@ -193,35 +490,103 @@ const RequestPreview = (() => {
       clear();
       return;
     }
-
     methodSelect.value = request.method || 'GET';
     urlInput.value = request.url || '';
     paramRows = parseParamsFromUrl(request.url || '');
     headerRows = parseHeadersFromObject(request.headers);
-    bodyInput.value = request.body || '';
+    inferBodyFromRequest(request);
     renderParamRows();
     renderHeaderRows();
     updateHeaderTabCount();
+    updateParamsTabCount();
+    urlSyncLock = true;
+    urlInput.value = buildUrlWithParams(
+      getUrlWithoutQuery(request.url || '') || request.url || '',
+      paramRows,
+    );
+    urlSyncLock = false;
   }
 
   function clear() {
     methodSelect.value = 'GET';
     urlInput.value = '';
-    paramRows = [emptyParamRow()];
-    headerRows = [emptyHeaderRow()];
+    paramRows = [emptyKvRow()];
+    headerRows = [emptyKvRow()];
+    formDataRows = [emptyKvRow()];
+    urlencodedRows = [emptyKvRow()];
     bodyInput.value = '';
+    rawSubtype = 'json';
+    if (rawTypeSelect) rawTypeSelect.value = 'json';
+    binaryBase64 = '';
+    binaryFilename = '';
+    if (binaryFileInput) binaryFileInput.value = '';
+    if (binaryNameEl) binaryNameEl.textContent = '未选择文件';
+    graphqlQueryInput.value = '';
+    graphqlVarsInput.value = '';
+    setBodyType('none');
     renderParamRows();
     renderHeaderRows();
+    renderFormDataRows();
+    renderUrlencodedRows();
     updateHeaderTabCount();
+    updateParamsTabCount();
   }
 
   function setUrlBar(text) {
     urlInput.value = text || '';
+    if (text) {
+      paramRows = parseParamsFromUrl(text);
+      renderParamRows();
+      updateParamsTabCount();
+    }
+  }
+
+  function getRowsByPrefix(prefix) {
+    switch (prefix) {
+      case 'param': return paramRows;
+      case 'header': return headerRows;
+      case 'formdata': return formDataRows;
+      case 'urlencoded': return urlencodedRows;
+      default: return [];
+    }
+  }
+
+  function bindKvTable(tbody, renderFn, prefix) {
+    tbody.addEventListener('change', (e) => {
+      const target = e.target;
+      const idxKey = `${prefix}Idx`;
+      if (target.dataset[idxKey] == null) return;
+      const rows = getRowsByPrefix(prefix);
+      if (target.dataset.field === 'enabled') {
+        updateKvField(rows, renderFn, +target.dataset[idxKey], 'enabled', target.checked, prefix);
+      }
+    });
+    tbody.addEventListener('input', (e) => {
+      const target = e.target;
+      const idxKey = `${prefix}Idx`;
+      if (target.dataset[idxKey] == null) return;
+      const rows = getRowsByPrefix(prefix);
+      updateKvField(rows, renderFn, +target.dataset[idxKey], target.dataset.field, target.value, prefix);
+    });
+  }
+
+  function arrayBufferToBase64(buffer) {
+    let binary = '';
+    const bytes = new Uint8Array(buffer);
+    for (let i = 0; i < bytes.length; i++) binary += String.fromCharCode(bytes[i]);
+    return btoa(binary);
   }
 
   function init(options) {
     onChange = options.onChange;
     const onPasteCurl = options.onPasteCurl;
+
+    function isCurlLike(text) {
+      const t = text.trim();
+      if (!t) return false;
+      const lower = t.toLowerCase();
+      return lower.startsWith('curl') || (lower.includes('-h ') && /https?:\/\//.test(t));
+    }
 
     function tryConvertCurl(text) {
       if (onPasteCurl && isCurlLike(text)) {
@@ -231,79 +596,84 @@ const RequestPreview = (() => {
       return false;
     }
 
-    function isCurlLike(text) {
-      const t = text.trim();
-      if (!t) return false;
-      const lower = t.toLowerCase();
-      return lower.startsWith('curl') || (lower.includes('-h ') && /https?:\/\//.test(t));
-    }
-
-    methodSelect.innerHTML = METHODS.map(m =>
-      `<option value="${m}">${m}</option>`
-    ).join('');
+    methodSelect.innerHTML = METHODS.map(m => `<option value="${m}">${m}</option>`).join('');
 
     document.querySelectorAll('.preview-tab').forEach(btn => {
       btn.addEventListener('click', () => switchTab(btn.dataset.previewTab));
+    });
+
+    document.querySelectorAll('input[name="body-type"]').forEach(radio => {
+      radio.addEventListener('change', () => {
+        if (radio.checked) {
+          setBodyType(radio.value);
+          syncNow();
+        }
+      });
     });
 
     methodSelect.addEventListener('change', syncNow);
 
     urlInput.addEventListener('paste', (e) => {
       const text = e.clipboardData?.getData('text') || '';
-      if (tryConvertCurl(text)) {
-        e.preventDefault();
-      }
+      if (tryConvertCurl(text)) e.preventDefault();
+    });
+
+    urlInput.addEventListener('input', () => {
+      if (urlSyncLock) return;
+      clearTimeout(urlInputTimer);
+      urlInputTimer = setTimeout(applyUrlToParams, 200);
     });
 
     urlInput.addEventListener('change', () => {
       const v = urlInput.value.trim();
       if (tryConvertCurl(v)) return;
-      paramRows = parseParamsFromUrl(urlInput.value);
-      renderParamRows();
-      syncNow();
+      applyUrlToParams();
     });
 
     urlInput.addEventListener('keydown', (e) => {
-      if (e.key === 'Enter') {
-        document.getElementById('send-btn').click();
-      }
+      if (e.key === 'Enter') document.getElementById('send-btn').click();
     });
 
     bodyInput.addEventListener('input', scheduleSync);
+    if (rawTypeSelect) {
+      rawTypeSelect.addEventListener('change', () => {
+        rawSubtype = rawTypeSelect.value;
+        syncNow();
+      });
+    }
+    graphqlQueryInput.addEventListener('input', scheduleSync);
+    graphqlVarsInput.addEventListener('input', scheduleSync);
 
-    paramsTbody.addEventListener('change', (e) => {
-      const target = e.target;
-      if (target.dataset.paramIdx == null) return;
-      const idx = +target.dataset.paramIdx;
-      const field = target.dataset.field;
-      if (field === 'enabled') {
-        updateParamField(idx, field, target.checked);
-      }
-    });
+    if (binaryFileInput) {
+      binaryFileInput.addEventListener('change', () => {
+        const file = binaryFileInput.files[0];
+        if (!file) {
+          binaryBase64 = '';
+          binaryFilename = '';
+          if (binaryNameEl) binaryNameEl.textContent = '未选择文件';
+          scheduleSync();
+          return;
+        }
+        const reader = new FileReader();
+        reader.onload = () => {
+          binaryBase64 = arrayBufferToBase64(reader.result);
+          binaryFilename = file.name;
+          if (binaryNameEl) binaryNameEl.textContent = file.name;
+          syncNow();
+        };
+        reader.readAsArrayBuffer(file);
+      });
+    }
 
-    paramsTbody.addEventListener('input', (e) => {
-      const target = e.target;
-      if (target.dataset.paramIdx == null) return;
-      updateParamField(+target.dataset.paramIdx, target.dataset.field, target.value);
-    });
-
-    headersTbody.addEventListener('change', (e) => {
-      const target = e.target;
-      if (target.dataset.headerIdx == null) return;
-      const idx = +target.dataset.headerIdx;
-      const field = target.dataset.field;
-      if (field === 'enabled') {
-        updateHeaderField(idx, field, target.checked);
-      }
-    });
-
-    headersTbody.addEventListener('input', (e) => {
-      const target = e.target;
-      if (target.dataset.headerIdx == null) return;
-      updateHeaderField(+target.dataset.headerIdx, target.dataset.field, target.value);
-    });
+    bindKvTable(paramsTbody, renderParamRows, 'param');
+    bindKvTable(headersTbody, renderHeaderRows, 'header');
+    bindKvTable(formDataTbody, renderFormDataRows, 'formdata');
+    bindKvTable(urlencodedTbody, renderUrlencodedRows, 'urlencoded');
 
     switchTab('params');
+    setBodyType('none');
+    renderFormDataRows();
+    renderUrlencodedRows();
   }
 
   return { init, populate, clear, buildRequest, setUrlBar };

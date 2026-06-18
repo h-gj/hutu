@@ -1,0 +1,154 @@
+.note-landing-body {
+  background: #f0f2f5;
+}
+
+.note-landing-card {
+  background: #fff;
+  border-radius: 10px;
+  padding: 24px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.07);
+}
+
+.note-landing-list {
+  margin: 0 0 24px;
+  padding-left: 20px;
+  color: #444;
+  font-size: 0.95rem;
+}
+
+.note-landing-list li {
+  margin-bottom: 10px;
+}
+
+.note-landing-list code {
+  background: #f6f8fa;
+  padding: 2px 6px;
+  border-radius: 4px;
+  font-size: 0.9em;
+}
+
+.note-landing-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.note-open-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.note-open-row label {
+  font-size: 0.875rem;
+  color: #666;
+}
+
+.note-open-row input {
+  flex: 1;
+  min-width: 140px;
+  border: 1px solid #ddd;
+  border-radius: 6px;
+  padding: 8px 12px;
+  font-size: 0.9rem;
+}
+
+.note-open-row input:focus {
+  outline: none;
+  border-color: #0f3460;
+}
+
+/* ── Editor page (note.ms style) ── */
+.note-editor-body {
+  margin: 0;
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  background: #fff;
+  color: #222;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+}
+
+.note-editor-bar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 16px;
+  border-bottom: 1px solid #eee;
+  flex-shrink: 0;
+  background: #fafafa;
+}
+
+.note-editor-logo {
+  font-weight: 700;
+  font-size: 0.9rem;
+  color: #16213e;
+  text-decoration: none;
+  flex-shrink: 0;
+}
+
+.note-editor-logo:hover {
+  color: #0f3460;
+}
+
+.note-editor-path {
+  font-size: 0.85rem;
+  color: #888;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+}
+
+.note-editor-actions {
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.note-btn {
+  border: 1px solid #ddd;
+  background: #fff;
+  color: #444;
+  padding: 5px 12px;
+  border-radius: 6px;
+  font-size: 0.8rem;
+  cursor: pointer;
+  text-decoration: none;
+}
+
+.note-btn:hover {
+  background: #f5f5f5;
+  border-color: #ccc;
+}
+
+.note-save-status {
+  font-size: 0.8rem;
+  color: #888;
+  min-width: 60px;
+}
+
+.note-editor-textarea {
+  flex: 1;
+  width: 100%;
+  border: none;
+  resize: none;
+  padding: 24px 32px;
+  font-size: 1rem;
+  line-height: 1.7;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  background: #fff;
+  color: #222;
+  min-height: calc(100vh - 52px);
+}
+
+.note-editor-textarea:focus {
+  outline: none;
+}
+
+@media (max-width: 640px) {
+  .note-editor-textarea {
+    padding: 16px;
+    font-size: 0.95rem;
+  }
+}

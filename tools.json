@@ -16,11 +16,27 @@
       "category": "format"
     },
     {
+      "id": "sql-tool",
+      "logo": "SQL",
+      "title": "SQL 格式化",
+      "intro": "SQL 语句格式化与语法检测，支持 MySQL / PostgreSQL / SQLite 等方言",
+      "jump_to": "/tools/sql-tool/",
+      "category": "format"
+    },
+    {
+      "id": "online-editor",
+      "logo": "✎",
+      "title": "在线记事本",
+      "intro": "轻量在线记事本：进入即得随机短地址（如 /fsdf），编辑自动保存，复制链接即可分享",
+      "jump_to": "/tools/online-editor/",
+      "category": "text"
+    },
+    {
       "id": "ip-query",
       "logo": "IP",
       "title": "IP 查询",
       "intro": "查询 IP 地址归属地、WHOIS 等信息",
-      "jump_to": "https://www.ipaddress.com/",
+      "jump_to": "https://whatsmyip.now/",
       "category": "dev"
     },
     {
@@ -29,6 +45,14 @@
       "title": "Request Local",
       "intro": "将线上 curl 转为本地请求，替换为 127.0.0.1 并直接发送查看响应",
       "jump_to": "/tools/request-local/",
+      "category": "dev"
+    },
+    {
+      "id": "postbuman",
+      "logo": "⬡",
+      "title": "Postbuman",
+      "intro": "类似 Postman：地址栏粘贴 curl 直接发送，可编辑 Params / Headers / Body，不做端口映射",
+      "jump_to": "/tools/postbuman/",
       "category": "dev"
     }
   ]
