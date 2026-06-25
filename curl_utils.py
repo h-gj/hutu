@@ -1,11 +1,28 @@
 """Parse curl commands and forward HTTP requests."""
 
+import base64
 import re
 import shlex
 import time
 import urllib.error
 import urllib.request
-from urllib.parse import urlparse
+from urllib.parse import unquote, urlparse
+
+BINARY_CT_KEYWORDS = (
+    "pdf",
+    "octet-stream",
+    "zip",
+    "excel",
+    "spreadsheet",
+    "msword",
+    "wordprocessing",
+    "powerpoint",
+    "ms-powerpoint",
+    "/vnd.",
+    "image/",
+    "audio/",
+    "video/",
+)
 
 
 def normalize_curl_text(text: str) -> str:
@@ -185,7 +202,7 @@ def convert_curl(text: str, port: int, port_mappings: dict | list | None = None)
     }
 
 
-def send_request(request: dict, timeout: int = 30) -> dict:
+def send_request(request: dict, timeout: int = 30, prefer_binary: bool = False) -> dict:
     url = request["url"]
     method = request.get("method", "GET").upper()
     headers = request.get("headers") or {}
@@ -211,22 +228,26 @@ def send_request(request: dict, timeout: int = 30) -> dict:
         with urllib.request.urlopen(req, timeout=timeout) as resp:
             raw = resp.read()
             elapsed_ms = int((time.time() - start) * 1000)
+            resp_headers = dict(resp.headers)
+            body_payload = _build_response_body(raw, resp_headers, prefer_binary)
             return {
                 "ok": True,
                 "status": resp.status,
-                "headers": dict(resp.headers),
-                "body": _format_body(raw),
+                "headers": resp_headers,
                 "elapsed_ms": elapsed_ms,
+                **body_payload,
             }
     except urllib.error.HTTPError as e:
         raw = e.read()
         elapsed_ms = int((time.time() - start) * 1000)
+        resp_headers = dict(e.headers)
+        body_payload = _build_response_body(raw, resp_headers, prefer_binary)
         return {
             "ok": True,
             "status": e.code,
-            "headers": dict(e.headers),
-            "body": _format_body(raw),
+            "headers": resp_headers,
             "elapsed_ms": elapsed_ms,
+            **body_payload,
         }
     except urllib.error.URLError as e:
         elapsed_ms = int((time.time() - start) * 1000)
@@ -242,6 +263,83 @@ def send_request(request: dict, timeout: int = 30) -> dict:
             "error": str(e),
             "elapsed_ms": elapsed_ms,
         }
+
+
+def _filename_from_headers(headers: dict) -> str | None:
+    for key, value in headers.items():
+        if key.lower() != "content-disposition":
+            continue
+        match = re.search(r"filename\*=(?:UTF-8''|utf-8'')([^;\s]+)", value, re.I)
+        if match:
+            return unquote(match.group(1).strip().strip('"'))
+        match = re.search(r'filename="([^"]+)"', value, re.I)
+        if match:
+            return match.group(1)
+        match = re.search(r"filename=([^;\s]+)", value, re.I)
+        if match:
+            return match.group(1).strip('"')
+    return None
+
+
+def _get_content_type(headers: dict) -> str:
+    for key, value in headers.items():
+        if key.lower() == "content-type":
+            return value
+    return ""
+
+
+def _is_binary_response(raw: bytes, content_type: str, headers: dict) -> bool:
+    ct = (content_type or "").lower()
+    disposition = ""
+    for key, value in headers.items():
+        if key.lower() == "content-disposition":
+            disposition = value.lower()
+            break
+
+    if "attachment" in disposition:
+        return True
+    if _filename_from_headers(headers) and any(kw in ct for kw in BINARY_CT_KEYWORDS):
+        return True
+    for kw in BINARY_CT_KEYWORDS:
+        if kw in ct:
+            return True
+    if ct.startswith("text/") or "json" in ct:
+        try:
+            text = raw.decode("utf-8")
+            return text.count("\ufffd") > max(3, len(text) // 500)
+        except UnicodeDecodeError:
+            return True
+    if not ct:
+        try:
+            raw.decode("utf-8")
+            return False
+        except UnicodeDecodeError:
+            return True
+    try:
+        raw.decode("utf-8")
+    except UnicodeDecodeError:
+        return True
+    return False
+
+
+def _build_response_body(raw: bytes, resp_headers: dict, prefer_binary: bool) -> dict:
+    content_type = _get_content_type(resp_headers)
+    ct_main = content_type.split(";")[0].strip().lower() if content_type else ""
+
+    if prefer_binary and _is_binary_response(raw, content_type, resp_headers):
+        return {
+            "body": base64.b64encode(raw).decode("ascii"),
+            "body_encoding": "base64",
+            "content_type": ct_main or "application/octet-stream",
+            "filename": _filename_from_headers(resp_headers),
+        }
+
+    return {
+        "body": _format_body(raw),
+        "body_encoding": "utf-8",
+        "content_type": ct_main or None,
+        "filename": None,
+    }
 
 
 def _format_body(raw: bytes) -> str:

@@ -388,7 +388,8 @@ const CurlConvert = (() => {
     const lines = [`curl '${localUrl}'`];
     if (parsed.method !== 'GET') lines.push(`  -X ${parsed.method}`);
     Object.entries(parsed.headers).forEach(([name, value]) => {
-      lines.push(`  -H '${name}: ${value}'`);
+      const escaped = String(value).replace(/'/g, "'\\''");
+      lines.push(`  -H '${name}: ${escaped}'`);
     });
     if (parsed.bodyMeta?.type === 'form-data' && parsed.bodyMeta.formRows?.length) {
       parsed.bodyMeta.formRows.forEach(row => {
@@ -397,7 +398,13 @@ const CurlConvert = (() => {
         lines.push(`  -F '${escaped}'`);
       });
     } else if (parsed.body) {
-      lines.push(`  -d '${parsed.body.replace(/'/g, "'\\''")}'`);
+      if (parsed.body_encoding === 'base64') {
+        const name = parsed.bodyMeta?.binaryFilename || 'file.bin';
+        lines.push(`  --data-binary '@${name.replace(/'/g, "'\\''")}'`);
+      } else {
+        const escaped = String(parsed.body).replace(/'/g, "'\\''");
+        lines.push(`  -d '${escaped}'`);
+      }
     }
     return lines.join(' \\\n');
   }
@@ -435,6 +442,7 @@ const CurlConvert = (() => {
       method: request.method || 'GET',
       headers: request.headers || {},
       body: request.body,
+      body_encoding: request.body_encoding,
       bodyMeta: request.bodyMeta,
     }, request.url);
   }

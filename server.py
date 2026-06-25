@@ -8,8 +8,11 @@ import hmac
 import json
 import os
 import re
+import secrets
 import time
+from dict_convert import json_to_python_dict, python_dict_to_json
 from curl_utils import parse_curl, send_request
+from file_open import save_and_open_file
 from sql_utils import process_sql
 from http.server import BaseHTTPRequestHandler, HTTPServer
 from urllib.parse import unquote
@@ -22,7 +25,9 @@ ADMIN_CONFIG_FILE = os.path.join(DIR, "admin_config.json")
 DEV_SUBMISSIONS_FILE = os.path.join(DIR, "dev_submissions.json")
 DEV_SUBMISSIONS_MAX = 100
 NOTES_DIR = os.path.join(DIR, "notes")
+MARKDOWN_DOCS_DIR = os.path.join(DIR, "markdown_docs")
 NOTE_SLUG_RE = re.compile(r"^[a-z0-9]{3,32}$")
+DOC_ID_RE = re.compile(r"^[a-z0-9]{10,16}$")
 RESERVED_PATHS = frozenset(("/", "/index.html", "/favicon.ico"))
 RESERVED_PREFIXES = ("/api/", "/static/", "/tools/", "/admin")
 COOKIE_NAME = "hutu_session"
@@ -73,11 +78,6 @@ def verify_session(token: str, secret: str) -> str | None:
         return username
     except (ValueError, TypeError):
         return None
-
-
-def python_dict_to_json(text: str) -> str:
-    data = ast.literal_eval(text.strip())
-    return json.dumps(data, ensure_ascii=False, indent=2)
 
 
 def slugify(text: str) -> str:
@@ -155,6 +155,44 @@ def save_note(slug: str, content: str) -> int:
     return int(time.time() * 1000)
 
 
+def ensure_markdown_docs_dir():
+    os.makedirs(MARKDOWN_DOCS_DIR, exist_ok=True)
+
+
+def markdown_doc_path(doc_id: str) -> str:
+    return os.path.join(MARKDOWN_DOCS_DIR, f"{doc_id}.md")
+
+
+def load_markdown_doc(doc_id: str) -> dict | None:
+    path = markdown_doc_path(doc_id)
+    if not os.path.isfile(path):
+        return None
+    with open(path, "r", encoding="utf-8") as f:
+        content = f.read()
+    return {"content": content, "updated_at": int(os.path.getmtime(path) * 1000)}
+
+
+def save_markdown_doc(doc_id: str, content: str) -> int:
+    ensure_markdown_docs_dir()
+    path = markdown_doc_path(doc_id)
+    tmp_path = f"{path}.tmp"
+    with open(tmp_path, "w", encoding="utf-8") as f:
+        f.write(content)
+    os.replace(tmp_path, path)
+    return int(time.time() * 1000)
+
+
+def create_markdown_doc(content: str) -> str:
+    ensure_markdown_docs_dir()
+    for _ in range(8):
+        doc_id = secrets.token_hex(6)
+        path = markdown_doc_path(doc_id)
+        if not os.path.exists(path):
+            save_markdown_doc(doc_id, content)
+            return doc_id
+    raise RuntimeError("无法生成文档 ID")
+
+
 def is_note_slug_path(path: str) -> bool:
     if path in RESERVED_PATHS:
         return False
@@ -228,6 +266,18 @@ class Handler(BaseHTTPRequestHandler):
             self._json_response({"ok": True, **load_note(slug)})
             return
 
+        if path.startswith("/api/markdown-doc/"):
+            doc_id = path[len("/api/markdown-doc/"):].strip("/")
+            if not DOC_ID_RE.match(doc_id):
+                self.send_error(404)
+                return
+            doc = load_markdown_doc(doc_id)
+            if doc is None:
+                self._json_response({"ok": False, "error": "文档不存在"}, status=404)
+                return
+            self._json_response({"ok": True, "id": doc_id, **doc})
+            return
+
         if path in ("/", "/index.html"):
             self._serve_file("index.html", "text/html; charset=utf-8")
             return
@@ -279,6 +329,13 @@ class Handler(BaseHTTPRequestHandler):
                 return
             self._handle_save_note(slug)
             return
+        if path.startswith("/api/markdown-doc/"):
+            doc_id = path[len("/api/markdown-doc/"):].strip("/")
+            if not DOC_ID_RE.match(doc_id):
+                self.send_error(404)
+                return
+            self._handle_save_markdown_doc(doc_id)
+            return
         self.send_error(404)
 
     def do_POST(self):
@@ -306,6 +363,14 @@ class Handler(BaseHTTPRequestHandler):
 
         if path == "/api/request-local/submit-dev":
             self._handle_request_local_submit_dev()
+            return
+
+        if path == "/api/request-view/open-file":
+            self._handle_request_view_open_file()
+            return
+
+        if path == "/api/markdown-doc":
+            self._handle_create_markdown_doc()
             return
 
         if path.startswith("/api/notes/"):
@@ -386,8 +451,12 @@ class Handler(BaseHTTPRequestHandler):
             payload = json.loads(body)
             text = payload.get("text", "")
             if not text.strip():
-                raise ValueError("请输入 Python 字典内容")
-            result = python_dict_to_json(text)
+                raise ValueError("请输入待转换内容")
+            direction = payload.get("direction", "to_json")
+            if direction == "to_dict":
+                result = json_to_python_dict(text)
+            else:
+                result = python_dict_to_json(text)
             self._json_response({"ok": True, "result": result})
         except json.JSONDecodeError as e:
             self._json_response({"ok": False, "error": f"请求格式错误: {e}"})
@@ -438,7 +507,8 @@ class Handler(BaseHTTPRequestHandler):
             if not request or not request.get("url"):
                 raise ValueError("缺少 request 参数")
 
-            result = send_request(request)
+            prefer_binary = bool(payload.get("prefer_binary", False))
+            result = send_request(request, prefer_binary=prefer_binary)
             self._json_response(result)
         except json.JSONDecodeError as e:
             self._json_response({"ok": False, "error": f"请求格式错误: {e}"})
@@ -446,6 +516,26 @@ class Handler(BaseHTTPRequestHandler):
             self._json_response({"ok": False, "error": str(e)})
         except Exception as e:
             self._json_response({"ok": False, "error": f"发送失败: {e}"})
+
+    def _handle_request_view_open_file(self):
+        length = int(self.headers.get("Content-Length", 0))
+        body = self.rfile.read(length).decode("utf-8")
+
+        try:
+            payload = json.loads(body)
+            raw_b64 = payload.get("body")
+            if not raw_b64:
+                raise ValueError("缺少文件内容")
+            filename = (payload.get("filename") or "").strip() or "download.bin"
+            data = base64.b64decode(raw_b64)
+            path = save_and_open_file(data, filename)
+            self._json_response({"ok": True, "path": path})
+        except json.JSONDecodeError as e:
+            self._json_response({"ok": False, "error": f"请求格式错误: {e}"})
+        except (ValueError, TypeError) as e:
+            self._json_response({"ok": False, "error": str(e)})
+        except Exception as e:
+            self._json_response({"ok": False, "error": f"打开失败: {e}"})
 
     def _handle_request_local_submit_dev(self):
         length = int(self.headers.get("Content-Length", 0))
@@ -463,6 +553,48 @@ class Handler(BaseHTTPRequestHandler):
             self._json_response({"ok": False, "error": str(e)})
         except Exception as e:
             self._json_response({"ok": False, "error": f"提交失败: {e}"})
+
+    def _handle_save_markdown_doc(self, doc_id: str):
+        length = int(self.headers.get("Content-Length", 0))
+        body = self.rfile.read(length).decode("utf-8")
+
+        try:
+            payload = json.loads(body)
+            content = payload.get("content", "")
+            if not isinstance(content, str):
+                raise ValueError("content 必须是字符串")
+            if load_markdown_doc(doc_id) is None:
+                self._json_response({"ok": False, "error": "文档不存在"}, status=404)
+                return
+            updated_at = save_markdown_doc(doc_id, content)
+            self._json_response({"ok": True, "id": doc_id, "updated_at": updated_at})
+        except json.JSONDecodeError as e:
+            self._json_response({"ok": False, "error": f"请求格式错误: {e}"})
+        except (ValueError, TypeError) as e:
+            self._json_response({"ok": False, "error": str(e)})
+        except Exception as e:
+            self._json_response({"ok": False, "error": f"保存失败: {e}"})
+
+    def _handle_create_markdown_doc(self):
+        length = int(self.headers.get("Content-Length", 0))
+        body = self.rfile.read(length).decode("utf-8")
+
+        try:
+            payload = json.loads(body)
+            content = payload.get("content", "")
+            if not isinstance(content, str):
+                raise ValueError("content 必须是字符串")
+            if not content.strip():
+                raise ValueError("文档内容不能为空")
+            doc_id = create_markdown_doc(content)
+            share_url = f"/tools/markdown-reviewer/?id={doc_id}"
+            self._json_response({"ok": True, "id": doc_id, "url": share_url})
+        except json.JSONDecodeError as e:
+            self._json_response({"ok": False, "error": f"请求格式错误: {e}"})
+        except (ValueError, TypeError) as e:
+            self._json_response({"ok": False, "error": str(e)})
+        except Exception as e:
+            self._json_response({"ok": False, "error": f"创建失败: {e}"})
 
     def _handle_save_note(self, slug: str):
         length = int(self.headers.get("Content-Length", 0))

@@ -6,6 +6,7 @@ const statusBadge = document.getElementById('status-badge');
 
 let lastRequest = null;
 let lastOriginalCurl = '';
+let lastResponse = null;
 
 const PORT_STORAGE_KEY = 'request-local-port';
 const PORT_MAPPINGS_STORAGE_KEY = 'request-local-port-mappings';
@@ -46,6 +47,50 @@ function getLocalCurl() {
 
 function getRecordCurl() {
   return lastOriginalCurl || getLocalCurl();
+}
+
+async function generateApiDoc() {
+  const request = lastRequest || RequestPreview.buildRequest();
+  if (!request?.url?.trim()) {
+    showError('请先配置请求 URL');
+    return;
+  }
+
+  const response = lastResponse ? { ...lastResponse } : {
+    status: null,
+    elapsed_ms: null,
+    body: responseViewer.getText() || '',
+  };
+
+  if (!response.body && responseViewer.getText()) {
+    response.body = responseViewer.getText();
+  }
+
+  const markdown = ApiDocGenerator.generate(request, response, {
+    originalCurl: getRecordCurl(),
+    localCurl: getLocalCurl(),
+  });
+
+  const btn = document.getElementById('gen-api-doc-btn');
+  btn.disabled = true;
+  try {
+    const res = await fetch('/api/markdown-doc', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ content: markdown }),
+    });
+    const data = await res.json();
+    if (!data.ok) {
+      showError(data.error || '创建文档失败');
+      return;
+    }
+    hideError();
+    window.open(data.url, '_blank');
+  } catch {
+    showError('创建文档失败');
+  } finally {
+    btn.disabled = false;
+  }
 }
 
 function showError(msg) {
@@ -496,10 +541,23 @@ async function viewHistory(id) {
     setBadge(String(item.status), statusClass);
     responseMeta.textContent = item.elapsed_ms != null ? `${item.elapsed_ms} ms` : '';
     responseViewer.setText(item.body || '');
+    lastResponse = {
+      ok: true,
+      status: item.status,
+      elapsed_ms: item.elapsed_ms,
+      body: item.body || '',
+    };
   } else {
     statusBadge.hidden = true;
     responseMeta.textContent = '';
     responseViewer.setText(item.error || item.body || '');
+    lastResponse = {
+      ok: false,
+      status: item.status ?? null,
+      elapsed_ms: item.elapsed_ms ?? null,
+      body: item.body || item.error || '',
+      error: item.error || null,
+    };
   }
 
   if (!lastRequest && lastOriginalCurl) {
@@ -585,6 +643,13 @@ async function sendRequest() {
       setBadge('失败', 'err');
       showError(data.error || '请求失败');
       responseViewer.setText(data.error || '');
+      lastResponse = {
+        ok: false,
+        status: data.status ?? null,
+        elapsed_ms: data.elapsed_ms ?? null,
+        body: data.body || data.error || '',
+        error: data.error || null,
+      };
       recordSendResult(data);
       return;
     }
@@ -593,6 +658,12 @@ async function sendRequest() {
     setBadge(`${data.status}`, statusClass);
     responseMeta.textContent = `${data.elapsed_ms} ms`;
     responseViewer.setText(data.body || '');
+    lastResponse = {
+      ok: true,
+      status: data.status,
+      elapsed_ms: data.elapsed_ms,
+      body: data.body || '',
+    };
     hideError();
     recordSendResult(data);
   } catch (err) {
@@ -603,6 +674,7 @@ async function sendRequest() {
     }
     setBadge('失败', 'err');
     showError('发送请求失败');
+    lastResponse = { ok: false, status: null, elapsed_ms: null, body: '', error: '发送请求失败' };
     recordSendResult({ ok: false, error: '发送请求失败' });
   } finally {
     RequestSendUI.clearAbort();
@@ -750,6 +822,7 @@ submitterNameInput.addEventListener('keydown', (e) => {
 document.getElementById('send-btn').addEventListener('click', sendRequest);
 document.getElementById('paste-send-btn').addEventListener('click', pasteAndSend);
 document.getElementById('paste-submit-dev-btn').addEventListener('click', pasteAndSubmitDev);
+document.getElementById('gen-api-doc-btn').addEventListener('click', generateApiDoc);
 
 document.querySelectorAll('.section-panel-tab').forEach(btn => {
   btn.addEventListener('click', () => switchPanelTab(btn.dataset.panel));
@@ -790,6 +863,7 @@ portInput.addEventListener('change', () => {
 document.getElementById('clear-preview').addEventListener('click', () => {
   lastOriginalCurl = '';
   lastRequest = null;
+  lastResponse = null;
   lastUsedPort = null;
   updatePortHint(null, null);
   RequestPreview.clear();

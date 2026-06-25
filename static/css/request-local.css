@@ -410,6 +410,12 @@
   margin: 0;
 }
 
+.preview-section-actions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
 .preview-section-hint {
   font-size: 0.8rem;
   color: #888;
@@ -420,6 +426,71 @@
   gap: 8px;
   margin-bottom: 12px;
   align-items: stretch;
+}
+
+.port-inline {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 0.875rem;
+  color: #444;
+}
+
+.port-inline input[type="number"] {
+  width: 100px;
+  border: 1px solid #ddd;
+  border-radius: 6px;
+  padding: 8px 12px;
+  font-size: 0.9rem;
+}
+
+.port-inline input:disabled {
+  background: #f0f0f0;
+  color: #999;
+}
+
+.request-view-options {
+  margin-bottom: 20px;
+}
+
+.file-result {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 16px 20px;
+  margin-bottom: 12px;
+  background: #f6f8fa;
+  border: 1px solid #e8e8e8;
+  border-radius: 8px;
+}
+
+.file-result-icon {
+  font-size: 2rem;
+  line-height: 1;
+}
+
+.file-result-info {
+  flex: 1;
+  min-width: 0;
+}
+
+.file-result-name {
+  font-weight: 600;
+  color: #1a1a2e;
+  margin: 0 0 4px;
+  word-break: break-all;
+}
+
+.file-result-meta {
+  font-size: 0.8rem;
+  color: #666;
+  margin: 0;
+}
+
+.file-result-actions {
+  display: flex;
+  gap: 8px;
+  flex-shrink: 0;
 }
 
 .preview-send-wrap {
@@ -743,6 +814,12 @@
 .response-meta {
   font-size: 0.8rem;
   color: #888;
+}
+
+.response-doc-btn {
+  margin-left: auto;
+  font-size: 0.8rem;
+  white-space: nowrap;
 }
 
 .response-viewer-wrap {
@@ -1092,4 +1169,280 @@
 .btn-page:disabled {
   opacity: 0.45;
   cursor: not-allowed;
+}
+
+.rv-search-bar {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 8px;
+  background: #252526;
+  border-bottom: 1px solid #333;
+}
+
+.rv-search-bar[hidden] {
+  display: none !important;
+}
+
+.rv-search-input {
+  flex: 1;
+  min-width: 0;
+  border: 1px solid #3c3c3c;
+  border-radius: 4px;
+  background: #1e1e1e;
+  color: #d4d4d4;
+  font-size: 12px;
+  padding: 4px 8px;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+}
+
+.rv-search-input:focus {
+  outline: none;
+  border-color: #0f3460;
+}
+
+.rv-search-input::-webkit-search-cancel-button {
+  cursor: pointer;
+}
+
+.rv-search-meta {
+  flex-shrink: 0;
+  font-size: 11px;
+  color: #858585;
+  min-width: 48px;
+  text-align: center;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+}
+
+.rv-search-meta[hidden] {
+  display: none !important;
+}
+
+.rv-search-btn,
+.rv-search-close {
+  flex-shrink: 0;
+  width: 26px;
+  height: 26px;
+  border: 1px solid #3c3c3c;
+  border-radius: 4px;
+  background: #2d2d2d;
+  color: #ccc;
+  font-size: 12px;
+  line-height: 1;
+  cursor: pointer;
+  padding: 0;
+}
+
+.rv-search-btn:hover:not(:disabled),
+.rv-search-close:hover {
+  background: #3c3c3c;
+  color: #fff;
+}
+
+.rv-search-btn:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
+.rv-search-close {
+  font-size: 16px;
+}
+
+.rv-search-hit {
+  background: rgba(234, 179, 8, 0.35);
+  color: inherit;
+  border-radius: 2px;
+  padding: 0;
+}
+
+.rv-search-active {
+  background: rgba(234, 179, 8, 0.75);
+  outline: 1px solid #fbbf24;
+}
+
+.rv-line.rv-line-search-active {
+  background: rgba(255, 255, 255, 0.06);
+}
+
+.rv-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  padding: 4px 8px;
+  background: #252526;
+  border-bottom: 1px solid #333;
+}
+
+.rv-toolbar[hidden] {
+  display: none !important;
+}
+
+.rv-expand-btn {
+  border: 1px solid #3c3c3c;
+  border-radius: 4px;
+  background: #2d2d2d;
+  color: #ccc;
+  font-size: 12px;
+  line-height: 1;
+  cursor: pointer;
+  padding: 4px 10px;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+}
+
+.rv-expand-btn:hover {
+  background: #3c3c3c;
+  color: #fff;
+}
+
+.rv-expand-modal {
+  position: fixed;
+  inset: 0;
+  z-index: 10000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+  box-sizing: border-box;
+}
+
+.rv-expand-modal[hidden] {
+  display: none !important;
+}
+
+body.rv-expand-open {
+  overflow: hidden;
+}
+
+.rv-expand-backdrop {
+  position: absolute;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.55);
+}
+
+.rv-expand-panel {
+  position: relative;
+  width: min(96vw, 1400px);
+  height: min(92vh, 920px);
+  background: #1e1e1e;
+  border-radius: 10px;
+  box-shadow: 0 12px 48px rgba(0, 0, 0, 0.4);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  outline: none;
+}
+
+.rv-expand-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 14px;
+  background: #252526;
+  border-bottom: 1px solid #333;
+  flex-shrink: 0;
+}
+
+.rv-expand-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.rv-expand-action {
+  border: 1px solid #3c3c3c;
+  border-radius: 4px;
+  background: #2d2d2d;
+  color: #ccc;
+  font-size: 12px;
+  line-height: 1;
+  cursor: pointer;
+  padding: 6px 12px;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+}
+
+.rv-expand-action:hover {
+  background: #3c3c3c;
+  color: #fff;
+}
+
+.rv-expand-replace-bar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 14px;
+  background: #2d2d2d;
+  border-bottom: 1px solid #333;
+  flex-shrink: 0;
+}
+
+.rv-replace-input {
+  flex: 1;
+  min-width: 0;
+  border: 1px solid #3c3c3c;
+  border-radius: 4px;
+  background: #1e1e1e;
+  color: #d4d4d4;
+  font-size: 12px;
+  padding: 6px 8px;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+}
+
+.rv-replace-input:focus {
+  outline: none;
+  border-color: #0f3460;
+}
+
+.rv-expand-title {
+  color: #ccc;
+  font-size: 14px;
+  font-weight: 600;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+}
+
+.rv-expand-close {
+  width: 30px;
+  height: 30px;
+  border: 1px solid #3c3c3c;
+  border-radius: 4px;
+  background: #2d2d2d;
+  color: #ccc;
+  font-size: 18px;
+  line-height: 1;
+  cursor: pointer;
+  padding: 0;
+}
+
+.rv-expand-close:hover {
+  background: #3c3c3c;
+  color: #fff;
+}
+
+.rv-expand-body {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+}
+
+.rv-expand-viewer {
+  flex: 1;
+  min-height: 0;
+  max-height: none !important;
+  border: none !important;
+  border-radius: 0 !important;
+  display: flex;
+  flex-direction: column;
+}
+
+.rv-expand-viewer .response-viewer {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.rv-expand-viewer .response-viewer-scroll {
+  flex: 1;
+  max-height: none !important;
+  min-height: 0;
 }

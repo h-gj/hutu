@@ -1,0 +1,70 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>JSON Viewer · HuTu</title>
+  <link rel="stylesheet" href="/static/css/common.css">
+  <link rel="stylesheet" href="/static/css/tool.css">
+  <link rel="stylesheet" href="/static/css/response-viewer.css">
+  <link rel="stylesheet" href="/static/css/markdown-reviewer.css">
+</head>
+<body>
+  <header class="site-header">
+    <div class="header-inner">
+      <a class="site-logo" href="/">HuTu</a>
+      <nav class="site-nav">
+        <a class="nav-item" href="/">← 返回首页</a>
+      </nav>
+    </div>
+  </header>
+
+  <main class="container container-wide">
+    <div class="tool-header">
+      <h1>JSON Viewer</h1>
+      <p class="subtitle">JSON 查看：语法高亮、折叠、查找替换；支持在线分享链接</p>
+    </div>
+
+    <div class="md-share-bar" id="json-share-bar" hidden>
+      <span class="md-share-label">分享链接</span>
+      <input type="text" class="md-share-url" id="json-share-url" readonly spellcheck="false">
+      <button type="button" class="btn-link" id="copy-share-url">复制链接</button>
+      <span class="md-share-status" id="json-share-status" hidden>已自动保存</span>
+    </div>
+
+    <p class="md-share-hint" id="json-share-hint">点击「分享」生成链接发给他人；分享后修改会自动保存。</p>
+
+    <div class="json-viewer-panel">
+      <div class="panel panel-json panel-json-standalone">
+        <div class="panel-header">
+          <span>JSON</span>
+          <div class="panel-header-actions">
+            <button type="button" class="btn-link" id="share-json">分享</button>
+            <button type="button" class="btn-link" id="paste-json">粘贴</button>
+            <button type="button" class="btn-link" id="format-json">格式化</button>
+            <button type="button" class="btn-link" id="clear-json">清空</button>
+            <button type="button" class="btn-link" id="copy-json">复制</button>
+          </div>
+        </div>
+        <div class="panel-viewer-wrap response-viewer-wrap panel-json-editor json-viewer-rv" id="json-viewer-wrap" tabindex="-1">
+          <div class="response-viewer">
+            <div class="response-viewer-empty">粘贴或输入 JSON…</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div id="error" class="error" hidden></div>
+  </main>
+
+  <footer class="site-footer">
+    <p>本地运行 · 无需访问国外网站</p>
+  </footer>
+
+  <button type="button" class="back-to-top" id="back-to-top" title="回到顶部" aria-label="回到顶部" hidden>↑</button>
+
+  <script src="/static/js/doc-share.js"></script>
+  <script src="/static/js/response-viewer.js"></script>
+  <script src="/static/js/json-viewer.js"></script>
+</body>
+</html>

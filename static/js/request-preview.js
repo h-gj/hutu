@@ -207,11 +207,16 @@ const RequestPreview = (() => {
   }
 
   function applyParamsToUrl() {
-    const base = getUrlWithoutQuery(urlInput.value) || urlInput.value.trim();
+    const raw = urlInput.value;
+    const base = getUrlWithoutQuery(raw) || raw.trim();
     const url = buildUrlWithParams(base, paramRows);
-    urlSyncLock = true;
-    urlInput.value = url;
-    urlSyncLock = false;
+
+    if (url !== raw && urlInput !== document.activeElement) {
+      urlSyncLock = true;
+      urlInput.value = url;
+      urlSyncLock = false;
+    }
+
     const req = buildRequest();
     if (onChange) onChange(req);
     return req;
@@ -232,7 +237,6 @@ const RequestPreview = (() => {
     paramRows = parseParamsFromUrl(urlInput.value);
     renderParamRows();
     updateParamsTabCount();
-    applyParamsToUrl();
   }
 
   function buildUrlWithParams(baseUrl, rows) {
@@ -389,8 +393,9 @@ const RequestPreview = (() => {
     if (field === 'enabled') row.enabled = value;
     else row[field] = value;
     if (field === 'key' || field === 'value') {
+      const lenBefore = rows.length;
       ensureTrailingEmptyRow(rows);
-      if (idx === rows.length - 2 && (row.key || row.value)) renderFn();
+      if (rows.length > lenBefore) renderFn();
     }
     if (prefix === 'param') {
       updateParamsTabCount();
@@ -577,6 +582,47 @@ const RequestPreview = (() => {
     return btoa(binary);
   }
 
+  async function copyCurl(btn) {
+    const request = buildRequest();
+    if (!request?.url?.trim()) return false;
+    if (typeof CurlConvert === 'undefined') return false;
+
+    const curl = CurlConvert.buildCurlFromRequest(request);
+    const orig = btn?.textContent || '复制 curl';
+    try {
+      await navigator.clipboard.writeText(curl);
+      if (btn) btn.textContent = '已复制';
+    } catch {
+      if (btn) btn.textContent = '已复制';
+    }
+    if (btn) setTimeout(() => { btn.textContent = orig; }, 1500);
+    return true;
+  }
+
+  function setupCopyCurlButton() {
+    const header = document.querySelector('.preview-section-header');
+    const clearBtn = document.getElementById('clear-preview');
+    if (!header || document.getElementById('copy-preview-curl')) return;
+
+    const copyBtn = document.createElement('button');
+    copyBtn.type = 'button';
+    copyBtn.className = 'btn-link';
+    copyBtn.id = 'copy-preview-curl';
+    copyBtn.textContent = '复制 curl';
+    copyBtn.title = '复制当前请求为 curl 命令';
+    copyBtn.addEventListener('click', () => copyCurl(copyBtn));
+
+    if (clearBtn && clearBtn.parentElement === header) {
+      const actions = document.createElement('div');
+      actions.className = 'preview-section-actions';
+      actions.appendChild(copyBtn);
+      actions.appendChild(clearBtn);
+      header.appendChild(actions);
+    } else {
+      header.appendChild(copyBtn);
+    }
+  }
+
   function init(options) {
     onChange = options.onChange;
     const onPasteCurl = options.onPasteCurl;
@@ -628,6 +674,13 @@ const RequestPreview = (() => {
       const v = urlInput.value.trim();
       if (tryConvertCurl(v)) return;
       applyUrlToParams();
+      applyParamsToUrl();
+    });
+
+    urlInput.addEventListener('blur', () => {
+      if (urlSyncLock) return;
+      applyUrlToParams();
+      applyParamsToUrl();
     });
 
     urlInput.addEventListener('keydown', (e) => {
@@ -670,11 +723,13 @@ const RequestPreview = (() => {
     bindKvTable(formDataTbody, renderFormDataRows, 'formdata');
     bindKvTable(urlencodedTbody, renderUrlencodedRows, 'urlencoded');
 
+    setupCopyCurlButton();
+
     switchTab('params');
     setBodyType('none');
     renderFormDataRows();
     renderUrlencodedRows();
   }
 
-  return { init, populate, clear, buildRequest, setUrlBar };
+  return { init, populate, clear, buildRequest, setUrlBar, copyCurl };
 })();

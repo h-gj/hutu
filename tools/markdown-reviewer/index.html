@@ -1,0 +1,81 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Markdown Reviewer · HuTu</title>
+  <link rel="stylesheet" href="/static/css/common.css">
+  <link rel="stylesheet" href="/static/css/tool.css">
+  <link rel="stylesheet" href="/static/css/markdown-reviewer.css">
+</head>
+<body>
+  <header class="site-header">
+    <div class="header-inner">
+      <a class="site-logo" href="/">HuTu</a>
+      <nav class="site-nav">
+        <a class="nav-item" href="/">← 返回首页</a>
+      </nav>
+    </div>
+  </header>
+
+  <main class="container container-wide">
+    <div class="tool-header">
+      <h1>Markdown Reviewer</h1>
+      <p class="subtitle">左侧编辑 Markdown，右侧实时预览；支持分享链接，他人打开即可查看</p>
+    </div>
+
+    <div class="md-share-bar" id="md-share-bar" hidden>
+      <span class="md-share-label">分享链接</span>
+      <input type="text" class="md-share-url" id="md-share-url" readonly spellcheck="false">
+      <button type="button" class="btn-link" id="copy-share-url">复制链接</button>
+      <span class="md-share-status" id="md-share-status" hidden>已自动保存</span>
+    </div>
+
+    <p class="md-share-hint" id="md-share-hint">编辑完成后点击「分享」生成链接，发给他人即可查看；分享后修改会自动保存。</p>
+
+    <div class="panels md-reviewer-panels">
+      <div class="panel panel-md-source">
+        <div class="panel-header">
+          <span>Markdown</span>
+          <div class="panel-header-actions">
+            <button type="button" class="btn-link" id="share-md">分享</button>
+            <button type="button" class="btn-link" id="paste-md">粘贴</button>
+            <button type="button" class="btn-link" id="clear-md">清空</button>
+            <button type="button" class="btn-link" id="copy-md">复制</button>
+          </div>
+        </div>
+        <textarea id="md-source" spellcheck="false" placeholder="# 标题&#10;&#10;在此输入或粘贴 **Markdown** 内容..."></textarea>
+      </div>
+
+      <div class="panel md-preview-panel">
+        <div class="panel-header">
+          <span>预览</span>
+          <div class="panel-header-actions">
+            <button type="button" class="btn-link" id="copy-html">复制 HTML</button>
+          </div>
+        </div>
+        <div class="panel-body" id="md-preview-wrap">
+          <div class="md-preview" id="md-preview">
+            <p class="md-preview-empty">预览将显示在这里</p>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <label class="md-sync-scroll checkbox">
+      <input type="checkbox" id="sync-scroll" checked>
+      同步滚动
+    </label>
+  </main>
+
+  <footer class="site-footer">
+    <p>本地运行 · 无需访问国外网站</p>
+  </footer>
+
+  <button type="button" class="back-to-top" id="back-to-top" title="回到顶部" aria-label="回到顶部" hidden>↑</button>
+
+  <script src="/static/js/line-editor.js"></script>
+  <script src="/static/js/markdown-render.js"></script>
+  <script src="/static/js/markdown-reviewer.js"></script>
+</body>
+</html>

@@ -1,0 +1,166 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>时间戳转换 · HuTu</title>
+  <link rel="stylesheet" href="/static/css/common.css">
+  <link rel="stylesheet" href="/static/css/tool.css">
+  <link rel="stylesheet" href="/static/css/timestamp.css">
+</head>
+<body>
+  <header class="site-header">
+    <div class="header-inner">
+      <a class="site-logo" href="/">HuTu</a>
+      <nav class="site-nav">
+        <a class="nav-item" href="/">← 返回首页</a>
+      </nav>
+    </div>
+  </header>
+
+  <main class="container container-wide">
+    <div class="tool-header">
+      <h1>Unix 时间戳转换</h1>
+      <p class="subtitle">时间戳与可读日期时间双向转换，支持秒 / 毫秒、本地时间 / UTC</p>
+    </div>
+
+    <section class="ts-now card">
+      <h2 class="ts-section-title">当前时间戳</h2>
+      <div class="ts-now-grid">
+        <div class="ts-now-item">
+          <span class="ts-label">秒</span>
+          <code class="ts-value" id="now-seconds">—</code>
+          <button type="button" class="btn-link ts-copy" data-copy="now-seconds">复制</button>
+        </div>
+        <div class="ts-now-item">
+          <span class="ts-label">毫秒</span>
+          <code class="ts-value" id="now-millis">—</code>
+          <button type="button" class="btn-link ts-copy" data-copy="now-millis">复制</button>
+        </div>
+        <div class="ts-now-item">
+          <span class="ts-label">本地时间</span>
+          <code class="ts-value ts-value-wide" id="now-local">—</code>
+        </div>
+        <div class="ts-now-item">
+          <span class="ts-label">UTC</span>
+          <code class="ts-value ts-value-wide" id="now-utc">—</code>
+        </div>
+      </div>
+    </section>
+
+    <div class="ts-convert-panels">
+      <section class="card ts-panel">
+        <h2 class="ts-section-title">时间戳 → 日期时间</h2>
+        <div class="ts-field">
+          <label for="ts-input">时间戳</label>
+          <input type="text" id="ts-input" class="ts-input" placeholder="例如 1719234780 或 1719234780123" spellcheck="false">
+        </div>
+        <div class="ts-options">
+          <label class="ts-radio">
+            <input type="radio" name="ts-unit" value="auto" checked>
+            自动识别
+          </label>
+          <label class="ts-radio">
+            <input type="radio" name="ts-unit" value="s">
+            秒
+          </label>
+          <label class="ts-radio">
+            <input type="radio" name="ts-unit" value="ms">
+            毫秒
+          </label>
+        </div>
+        <div class="ts-options">
+          <label class="ts-radio">
+            <input type="radio" name="ts-tz" value="local" checked>
+            本地时间
+          </label>
+          <label class="ts-radio">
+            <input type="radio" name="ts-tz" value="utc">
+            UTC
+          </label>
+        </div>
+        <div class="ts-actions">
+          <button type="button" class="btn-secondary" id="ts-use-now">填入当前</button>
+        </div>
+        <div class="ts-result" id="ts-to-date-result" hidden>
+          <div class="ts-result-row">
+            <span class="ts-label">标准格式</span>
+            <code id="ts-out-standard"></code>
+            <button type="button" class="btn-link ts-copy-inline" data-target="ts-out-standard">复制</button>
+          </div>
+          <div class="ts-result-row">
+            <span class="ts-label">ISO 8601</span>
+            <code id="ts-out-iso"></code>
+            <button type="button" class="btn-link ts-copy-inline" data-target="ts-out-iso">复制</button>
+          </div>
+          <div class="ts-result-row">
+            <span class="ts-label">UTC</span>
+            <code id="ts-out-utc"></code>
+            <button type="button" class="btn-link ts-copy-inline" data-target="ts-out-utc">复制</button>
+          </div>
+          <div class="ts-result-row">
+            <span class="ts-label">本地</span>
+            <code id="ts-out-local"></code>
+            <button type="button" class="btn-link ts-copy-inline" data-target="ts-out-local">复制</button>
+          </div>
+        </div>
+        <p class="ts-error" id="ts-to-date-error" hidden></p>
+      </section>
+
+      <section class="card ts-panel">
+        <h2 class="ts-section-title">日期时间 → 时间戳</h2>
+        <div class="ts-field">
+          <label for="dt-input">日期时间</label>
+          <input type="datetime-local" id="dt-input" class="ts-input">
+        </div>
+        <div class="ts-field">
+          <label for="dt-iso-input">或 ISO 字符串</label>
+          <input type="text" id="dt-iso-input" class="ts-input" placeholder="2024-06-24T12:43:00 或 2024-06-24 12:43:00" spellcheck="false">
+        </div>
+        <div class="ts-actions">
+          <button type="button" class="btn-secondary" id="dt-use-now">填入当前</button>
+        </div>
+        <div class="ts-result" id="date-to-ts-result" hidden>
+          <div class="ts-result-row">
+            <span class="ts-label">秒</span>
+            <code id="dt-out-seconds"></code>
+            <button type="button" class="btn-link ts-copy-inline" data-target="dt-out-seconds">复制</button>
+          </div>
+          <div class="ts-result-row">
+            <span class="ts-label">毫秒</span>
+            <code id="dt-out-millis"></code>
+            <button type="button" class="btn-link ts-copy-inline" data-target="dt-out-millis">复制</button>
+          </div>
+        </div>
+        <p class="ts-error" id="date-to-ts-error" hidden></p>
+      </section>
+    </div>
+
+    <section class="card ts-snippet-section">
+      <button type="button" class="ts-snippet-toggle" id="snippet-toggle" aria-expanded="false">
+        <span>各语言获取当前时间戳</span>
+        <span class="ts-snippet-chevron" aria-hidden="true">▼</span>
+      </button>
+      <div class="ts-snippet-body" id="snippet-body" hidden>
+        <table class="ts-snippet-table">
+          <thead>
+            <tr>
+              <th>语言</th>
+              <th>代码</th>
+            </tr>
+          </thead>
+          <tbody id="snippet-tbody"></tbody>
+        </table>
+      </div>
+    </section>
+  </main>
+
+  <footer class="site-footer">
+    <p>本地运行 · 无需访问国外网站</p>
+  </footer>
+
+  <button type="button" class="back-to-top" id="back-to-top" title="回到顶部" aria-label="回到顶部" hidden>↑</button>
+
+  <script src="/static/js/timestamp.js"></script>
+</body>
+</html>
