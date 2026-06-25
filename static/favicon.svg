@@ -1,0 +1,14 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" role="img" aria-label="HuTu">
+  <rect width="32" height="32" rx="7" fill="#16213e"/>
+  <rect x="6" y="13" width="20" height="13" rx="2.5" fill="#0f3460"/>
+  <path
+    d="M11 13V10.5C11 8.57 12.79 7 16 7s5 1.57 5 3.5V13"
+    fill="none"
+    stroke="#a8dadc"
+    stroke-width="2"
+    stroke-linecap="round"
+  />
+  <rect x="10.5" y="16" width="2.5" height="7" rx="0.5" fill="#a8dadc"/>
+  <rect x="19" y="16" width="2.5" height="7" rx="0.5" fill="#a8dadc"/>
+  <rect x="10.5" y="18.5" width="11" height="2.5" rx="0.5" fill="#a8dadc"/>
+</svg>

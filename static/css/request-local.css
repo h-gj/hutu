@@ -37,6 +37,13 @@
   border-radius: 4px;
 }
 
+.port-bar-actions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-left: auto;
+}
+
 .mapping-modal {
   max-width: 560px;
 }

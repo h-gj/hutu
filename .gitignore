@@ -15,6 +15,7 @@ dev_submissions.json
 # Local notes
 notes/
 markdown_docs/
+whiteboards/
 
 # IDE
 .idea/

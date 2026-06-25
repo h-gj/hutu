@@ -3,6 +3,9 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <link rel="icon" href="/static/favicon.svg" type="image/svg+xml">
+  <link rel="icon" href="/static/favicon-32.png" type="image/png" sizes="32x32">
+  <link rel="apple-touch-icon" href="/static/apple-touch-icon.png">
   <title>Postbuman · HuTu</title>
   <link rel="stylesheet" href="/static/css/common.css">
   <link rel="stylesheet" href="/static/css/tool.css">
@@ -24,10 +27,6 @@
       <p class="subtitle">在地址栏粘贴 curl，解析后直接发送请求查看响应（不做本地端口映射）</p>
     </div>
 
-    <div class="port-bar postbuman-actions">
-      <button type="button" class="btn-primary btn-accent" id="paste-send-btn">一键粘贴并发送</button>
-    </div>
-
     <div id="error" class="error" hidden></div>
 
     <section class="request-preview-section" id="request-preview-section">
@@ -40,6 +39,7 @@
         <select id="preview-method" class="preview-method-select" title="请求方法"></select>
         <input type="text" id="preview-url" class="preview-url-input" spellcheck="false"
                placeholder="粘贴 curl 或输入 URL...">
+               <button type="button" class="btn-primary btn-accent" id="paste-send-btn">粘贴并发送</button>
         <button type="button" class="btn-primary preview-send-btn" id="send-btn">发送</button>
       </div>
 

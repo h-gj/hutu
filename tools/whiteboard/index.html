@@ -1,0 +1,74 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <link rel="icon" href="/static/favicon.svg" type="image/svg+xml">
+  <link rel="icon" href="/static/favicon-32.png" type="image/png" sizes="32x32">
+  <link rel="apple-touch-icon" href="/static/apple-touch-icon.png">
+  <title>白板 · HuTu</title>
+  <link rel="stylesheet" href="/static/css/common.css">
+  <link rel="stylesheet" href="/static/css/tool.css">
+  <link rel="stylesheet" href="/static/css/whiteboard.css">
+</head>
+<body class="whiteboard-body">
+  <header class="site-header">
+    <div class="header-inner">
+      <a class="site-logo" href="/">HuTu</a>
+      <nav class="site-nav">
+        <a class="nav-item" href="/">← 返回首页</a>
+      </nav>
+    </div>
+  </header>
+
+  <main class="whiteboard-main">
+    <div class="whiteboard-toolbar" id="toolbar">
+      <div class="wb-tool-group" role="group" aria-label="绘图工具">
+        <button type="button" class="wb-tool active" data-tool="pen" title="画笔">✏️</button>
+        <button type="button" class="wb-tool" data-tool="eraser" title="橡皮擦">🧹</button>
+        <button type="button" class="wb-tool" data-tool="line" title="直线">╱</button>
+        <button type="button" class="wb-tool" data-tool="rect" title="矩形">▭</button>
+        <button type="button" class="wb-tool" data-tool="ellipse" title="椭圆">○</button>
+        <button type="button" class="wb-tool" data-tool="arrow" title="箭头">→</button>
+      </div>
+
+      <div class="wb-tool-group wb-colors" role="group" aria-label="颜色">
+        <button type="button" class="wb-color active" data-color="#1a1a2e" style="--c:#1a1a2e" title="黑色"></button>
+        <button type="button" class="wb-color" data-color="#e63946" style="--c:#e63946" title="红色"></button>
+        <button type="button" class="wb-color" data-color="#2a9d8f" style="--c:#2a9d8f" title="绿色"></button>
+        <button type="button" class="wb-color" data-color="#0f3460" style="--c:#0f3460" title="蓝色"></button>
+        <button type="button" class="wb-color" data-color="#f4a261" style="--c:#f4a261" title="橙色"></button>
+        <button type="button" class="wb-color" data-color="#9b59b6" style="--c:#9b59b6" title="紫色"></button>
+        <input type="color" class="wb-color-picker" id="color-picker" value="#1a1a2e" title="自定义颜色">
+      </div>
+
+      <div class="wb-tool-group wb-size-group">
+        <label for="brush-size">粗细</label>
+        <input type="range" id="brush-size" min="1" max="40" value="3">
+        <span class="wb-size-val" id="brush-size-val">3</span>
+      </div>
+
+      <div class="wb-tool-group wb-actions">
+        <button type="button" class="btn-link" id="undo-btn" title="撤销">撤销</button>
+        <button type="button" class="btn-link" id="redo-btn" title="重做">重做</button>
+        <button type="button" class="btn-link" id="clear-btn" title="清空画布">清空</button>
+        <button type="button" class="btn-link" id="export-btn" title="导出 PNG">导出 PNG</button>
+        <button type="button" class="btn-link" id="share-btn" title="生成分享链接">分享</button>
+      </div>
+    </div>
+
+    <div class="wb-share-bar" id="wb-share-bar" hidden>
+      <span class="wb-share-label">分享链接</span>
+      <input type="text" class="wb-share-url" id="wb-share-url" readonly spellcheck="false">
+      <button type="button" class="btn-link" id="copy-share-url">复制链接</button>
+      <span class="wb-share-status" id="wb-share-status" hidden>已自动保存</span>
+    </div>
+
+    <div class="whiteboard-canvas-wrap" id="canvas-wrap">
+      <canvas id="whiteboard-canvas"></canvas>
+    </div>
+  </main>
+
+  <script src="/static/js/whiteboard.js"></script>
+</body>
+</html>

@@ -26,6 +26,7 @@ DEV_SUBMISSIONS_FILE = os.path.join(DIR, "dev_submissions.json")
 DEV_SUBMISSIONS_MAX = 100
 NOTES_DIR = os.path.join(DIR, "notes")
 MARKDOWN_DOCS_DIR = os.path.join(DIR, "markdown_docs")
+WHITEBOARDS_DIR = os.path.join(DIR, "whiteboards")
 NOTE_SLUG_RE = re.compile(r"^[a-z0-9]{3,32}$")
 DOC_ID_RE = re.compile(r"^[a-z0-9]{10,16}$")
 RESERVED_PATHS = frozenset(("/", "/index.html", "/favicon.ico"))
@@ -38,6 +39,9 @@ MIME = {
     ".css": "text/css; charset=utf-8",
     ".js": "application/javascript; charset=utf-8",
     ".json": "application/json; charset=utf-8",
+    ".svg": "image/svg+xml",
+    ".png": "image/png",
+    ".ico": "image/x-icon",
 }
 
 
@@ -193,6 +197,45 @@ def create_markdown_doc(content: str) -> str:
     raise RuntimeError("无法生成文档 ID")
 
 
+def ensure_whiteboards_dir():
+    os.makedirs(WHITEBOARDS_DIR, exist_ok=True)
+
+
+def whiteboard_path(board_id: str) -> str:
+    return os.path.join(WHITEBOARDS_DIR, f"{board_id}.json")
+
+
+def load_whiteboard(board_id: str) -> dict | None:
+    path = whiteboard_path(board_id)
+    if not os.path.isfile(path):
+        return None
+    with open(path, "r", encoding="utf-8") as f:
+        data = json.load(f)
+    updated_at = int(os.path.getmtime(path) * 1000)
+    return {"content": data, "updated_at": updated_at}
+
+
+def save_whiteboard(board_id: str, content: dict) -> int:
+    ensure_whiteboards_dir()
+    path = whiteboard_path(board_id)
+    tmp_path = f"{path}.tmp"
+    with open(tmp_path, "w", encoding="utf-8") as f:
+        json.dump(content, f, ensure_ascii=False, separators=(",", ":"))
+    os.replace(tmp_path, path)
+    return int(time.time() * 1000)
+
+
+def create_whiteboard(content: dict) -> str:
+    ensure_whiteboards_dir()
+    for _ in range(8):
+        board_id = secrets.token_hex(6)
+        path = whiteboard_path(board_id)
+        if not os.path.exists(path):
+            save_whiteboard(board_id, content)
+            return board_id
+    raise RuntimeError("无法生成白板 ID")
+
+
 def is_note_slug_path(path: str) -> bool:
     if path in RESERVED_PATHS:
         return False
@@ -278,6 +321,22 @@ class Handler(BaseHTTPRequestHandler):
             self._json_response({"ok": True, "id": doc_id, **doc})
             return
 
+        if path.startswith("/api/whiteboard/"):
+            board_id = path[len("/api/whiteboard/"):].strip("/")
+            if not DOC_ID_RE.match(board_id):
+                self.send_error(404)
+                return
+            board = load_whiteboard(board_id)
+            if board is None:
+                self._json_response({"ok": False, "error": "白板不存在"}, status=404)
+                return
+            self._json_response({"ok": True, "id": board_id, **board})
+            return
+
+        if path == "/favicon.ico":
+            self._serve_file(os.path.join("static", "favicon.ico"))
+            return
+
         if path in ("/", "/index.html"):
             self._serve_file("index.html", "text/html; charset=utf-8")
             return
@@ -336,6 +395,13 @@ class Handler(BaseHTTPRequestHandler):
                 return
             self._handle_save_markdown_doc(doc_id)
             return
+        if path.startswith("/api/whiteboard/"):
+            board_id = path[len("/api/whiteboard/"):].strip("/")
+            if not DOC_ID_RE.match(board_id):
+                self.send_error(404)
+                return
+            self._handle_save_whiteboard(board_id)
+            return
         self.send_error(404)
 
     def do_POST(self):
@@ -371,6 +437,10 @@ class Handler(BaseHTTPRequestHandler):
 
         if path == "/api/markdown-doc":
             self._handle_create_markdown_doc()
+            return
+
+        if path == "/api/whiteboard":
+            self._handle_create_whiteboard()
             return
 
         if path.startswith("/api/notes/"):
@@ -589,6 +659,46 @@ class Handler(BaseHTTPRequestHandler):
             doc_id = create_markdown_doc(content)
             share_url = f"/tools/markdown-reviewer/?id={doc_id}"
             self._json_response({"ok": True, "id": doc_id, "url": share_url})
+        except json.JSONDecodeError as e:
+            self._json_response({"ok": False, "error": f"请求格式错误: {e}"})
+        except (ValueError, TypeError) as e:
+            self._json_response({"ok": False, "error": str(e)})
+        except Exception as e:
+            self._json_response({"ok": False, "error": f"创建失败: {e}"})
+
+    def _handle_save_whiteboard(self, board_id: str):
+        length = int(self.headers.get("Content-Length", 0))
+        body = self.rfile.read(length).decode("utf-8")
+
+        try:
+            payload = json.loads(body)
+            content = payload.get("content")
+            if not isinstance(content, dict):
+                raise ValueError("content 必须是对象")
+            if load_whiteboard(board_id) is None:
+                self._json_response({"ok": False, "error": "白板不存在"}, status=404)
+                return
+            updated_at = save_whiteboard(board_id, content)
+            self._json_response({"ok": True, "id": board_id, "updated_at": updated_at})
+        except json.JSONDecodeError as e:
+            self._json_response({"ok": False, "error": f"请求格式错误: {e}"})
+        except (ValueError, TypeError) as e:
+            self._json_response({"ok": False, "error": str(e)})
+        except Exception as e:
+            self._json_response({"ok": False, "error": f"保存失败: {e}"})
+
+    def _handle_create_whiteboard(self):
+        length = int(self.headers.get("Content-Length", 0))
+        body = self.rfile.read(length).decode("utf-8")
+
+        try:
+            payload = json.loads(body)
+            content = payload.get("content")
+            if not isinstance(content, dict):
+                raise ValueError("content 必须是对象")
+            board_id = create_whiteboard(content)
+            share_url = f"/tools/whiteboard/?id={board_id}"
+            self._json_response({"ok": True, "id": board_id, "url": share_url})
         except json.JSONDecodeError as e:
             self._json_response({"ok": False, "error": f"请求格式错误: {e}"})
         except (ValueError, TypeError) as e:

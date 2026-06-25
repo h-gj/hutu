@@ -3,6 +3,9 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <link rel="icon" href="/static/favicon.svg" type="image/svg+xml">
+  <link rel="icon" href="/static/favicon-32.png" type="image/png" sizes="32x32">
+  <link rel="apple-touch-icon" href="/static/apple-touch-icon.png">
   <title>Request Local · HuTu</title>
   <link rel="stylesheet" href="/static/css/common.css">
   <link rel="stylesheet" href="/static/css/tool.css">
@@ -29,8 +32,10 @@
       <input type="number" id="port" value="8000" min="1" max="65535">
       <button type="button" class="btn-secondary" id="open-mapping-btn">配置映射</button>
       <span class="port-hint" id="port-hint" hidden></span>
-      <button type="button" class="btn-primary btn-accent" id="paste-send-btn">一键粘贴并发送</button>
-      <button type="button" class="btn-primary btn-submit-dev" id="paste-submit-dev-btn">一键粘贴并提交给开发</button>
+      <div class="port-bar-actions">
+        <button type="button" class="btn-primary btn-submit-dev" id="paste-submit-dev-btn">一键粘贴并提交</button>
+        <button type="button" class="btn-primary btn-accent" id="paste-send-btn">一键粘贴并发送</button>
+      </div>
     </div>
 
     <div id="error" class="error" hidden></div>
