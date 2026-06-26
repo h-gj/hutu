@@ -16,6 +16,8 @@ dev_submissions.json
 notes/
 markdown_docs/
 whiteboards/
+request_shares/
+postbuman_shares/
 
 # IDE
 .idea/

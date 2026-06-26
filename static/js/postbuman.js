@@ -5,7 +5,20 @@ const statusBadge = document.getElementById('status-badge');
 
 let lastRequest = null;
 let lastOriginalCurl = '';
+let lastResponse = null;
 let skipClearOriginalCurl = false;
+
+const shareBar = document.getElementById('pb-share-bar');
+const shareUrlInput = document.getElementById('pb-share-url');
+const shareStatusEl = document.getElementById('pb-share-status');
+const shareHintEl = document.getElementById('pb-share-hint');
+const shareRequestBtn = document.getElementById('share-request');
+
+const SHARE_SAVE_DEBOUNCE_MS = 800;
+let shareId = null;
+let shareSaveTimer = null;
+let isApplyingShare = false;
+let isSharing = false;
 
 const HISTORY_STORAGE_KEY = 'postbuman-history';
 const HISTORY_MAX = 100;
@@ -23,6 +36,188 @@ function getRecordCurl() {
   if (lastOriginalCurl) return lastOriginalCurl;
   if (!lastRequest) return '';
   return CurlConvert.buildCurlFromRequest(lastRequest);
+}
+
+function buildShareSnapshot() {
+  const request = lastRequest || RequestPreview.buildRequest();
+  const snapshot = {
+    curl: getRecordCurl(),
+    request: request?.url ? request : null,
+  };
+  const response = buildResponseSnapshot();
+  if (response) snapshot.response = response;
+  return snapshot;
+}
+
+function buildResponseSnapshot() {
+  if (!lastResponse) return null;
+  const body = lastResponse.body || lastResponse.error || responseViewer.getText() || '';
+  if (!body.trim() && lastResponse.status == null) return null;
+  return {
+    ok: Boolean(lastResponse.ok),
+    status: lastResponse.status ?? null,
+    elapsed_ms: lastResponse.elapsed_ms ?? null,
+    body: body.slice(0, BODY_STORAGE_MAX),
+    error: lastResponse.error || null,
+  };
+}
+
+function applyResponseSnapshot(response) {
+  if (!response || (!response.body && !response.error && response.status == null)) {
+    lastResponse = null;
+    statusBadge.hidden = true;
+    responseMeta.textContent = '';
+    responseViewer.clear();
+    return;
+  }
+
+  lastResponse = { ...response };
+
+  if (response.status != null) {
+    const statusClass = response.ok && response.status >= 200 && response.status < 300 ? 'ok' : 'err';
+    setBadge(String(response.status), statusClass);
+    responseMeta.textContent = response.elapsed_ms != null ? `${response.elapsed_ms} ms` : '';
+    responseViewer.setText(response.body || response.error || '');
+    return;
+  }
+
+  statusBadge.hidden = true;
+  responseMeta.textContent = '';
+  responseViewer.setText(response.error || response.body || '');
+}
+
+function showShareBar(id) {
+  if (!shareBar || !shareUrlInput) return null;
+  const shareUrl = RequestShare.buildPageUrl(id);
+  shareUrlInput.value = shareUrl;
+  shareBar.removeAttribute('hidden');
+  if (shareHintEl) shareHintEl.hidden = true;
+  if (shareRequestBtn) shareRequestBtn.textContent = '复制分享链接';
+  shareBar.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+  return shareUrl;
+}
+
+function setShareId(id) {
+  shareId = id;
+  const shareUrl = showShareBar(id);
+  try {
+    RequestShare.setPageUrl(id);
+  } catch {
+    /* ignore URL update errors */
+  }
+  return shareUrl;
+}
+
+function scheduleShareSave() {
+  if (!shareId || isApplyingShare) return;
+  clearTimeout(shareSaveTimer);
+  shareSaveTimer = setTimeout(saveShareSnapshot, SHARE_SAVE_DEBOUNCE_MS);
+}
+
+async function saveShareSnapshot() {
+  if (!shareId || isApplyingShare) return;
+  try {
+    await RequestShare.save(shareId, buildShareSnapshot());
+    if (shareStatusEl) {
+      shareStatusEl.hidden = false;
+      clearTimeout(saveShareSnapshot._hideTimer);
+      saveShareSnapshot._hideTimer = setTimeout(() => {
+        shareStatusEl.hidden = true;
+      }, 2000);
+    }
+  } catch {
+    /* ignore */
+  }
+}
+
+async function copyWithFeedback(btn, text) {
+  if (!btn) return;
+  const copyText = text || shareUrlInput?.value || (shareId ? RequestShare.buildPageUrl(shareId) : '');
+  if (!copyText) return;
+  const orig = btn.textContent;
+  try {
+    await navigator.clipboard.writeText(copyText);
+  } catch {
+    /* fallback below */
+  }
+  btn.textContent = '已复制';
+  setTimeout(() => { btn.textContent = orig; }, 1500);
+}
+
+function hasShareableContent() {
+  const snapshot = buildShareSnapshot();
+  return Boolean(snapshot.curl?.trim() || snapshot.request?.url?.trim());
+}
+
+async function shareDocument() {
+  if (isSharing) return;
+
+  if (!hasShareableContent()) {
+    shareRequestBtn.textContent = '内容为空';
+    setTimeout(() => {
+      shareRequestBtn.textContent = shareId ? '复制分享链接' : '分享';
+    }, 1500);
+    return;
+  }
+
+  if (shareId) {
+    const shareUrl = showShareBar(shareId) || RequestShare.buildPageUrl(shareId);
+    await copyWithFeedback(shareRequestBtn, shareUrl);
+    return;
+  }
+
+  const orig = shareRequestBtn.textContent;
+  isSharing = true;
+  shareRequestBtn.disabled = true;
+  shareRequestBtn.textContent = '生成中…';
+  try {
+    const id = await RequestShare.create(buildShareSnapshot());
+    const shareUrl = setShareId(id) || RequestShare.buildPageUrl(id);
+    if (shareStatusEl) {
+      shareStatusEl.hidden = false;
+      shareStatusEl.textContent = '已生成分享链接';
+    }
+    await copyWithFeedback(shareRequestBtn, shareUrl);
+  } catch {
+    shareRequestBtn.textContent = '分享失败';
+    setTimeout(() => { shareRequestBtn.textContent = orig; }, 1500);
+  } finally {
+    isSharing = false;
+    shareRequestBtn.disabled = false;
+  }
+}
+
+function applyShareSnapshot(data) {
+  isApplyingShare = true;
+  try {
+    if (data.request?.url) {
+      lastOriginalCurl = data.curl || '';
+      lastRequest = data.request;
+      skipClearOriginalCurl = true;
+      RequestPreview.populate(lastRequest);
+      skipClearOriginalCurl = false;
+    } else if (data.curl?.trim()) {
+      convertFromCurl(data.curl);
+    }
+    applyResponseSnapshot(data.response);
+    hideError();
+  } finally {
+    isApplyingShare = false;
+  }
+}
+
+async function loadSharedSnapshot(id) {
+  try {
+    const content = await RequestShare.load(id);
+    applyShareSnapshot(content);
+    setShareId(id);
+  } catch (err) {
+    showError(err.message || '加载分享失败');
+    RequestShare.clearPageUrl();
+    if (!RequestPreview.restoreFromStorage()) {
+      convertFromCurl(SAMPLE_CURL);
+    }
+  }
 }
 
 function showError(msg) {
@@ -52,6 +247,7 @@ function setSending(active) {
 function applyPreviewRequest(request) {
   lastRequest = request;
   if (!skipClearOriginalCurl) lastOriginalCurl = '';
+  scheduleShareSave();
 }
 
 function buildRequestFromParsed(parsed) {
@@ -82,6 +278,7 @@ function convertFromCurl(curl) {
     RequestPreview.populate(lastRequest);
     skipClearOriginalCurl = false;
     hideError();
+    scheduleShareSave();
     return true;
   } catch (e) {
     lastOriginalCurl = text;
@@ -210,10 +407,23 @@ function viewHistory(id) {
     setBadge(String(item.status), statusClass);
     responseMeta.textContent = item.elapsed_ms != null ? `${item.elapsed_ms} ms` : '';
     responseViewer.setText(item.body || '');
+    lastResponse = {
+      ok: true,
+      status: item.status,
+      elapsed_ms: item.elapsed_ms,
+      body: item.body || '',
+    };
   } else {
     statusBadge.hidden = true;
     responseMeta.textContent = '';
     responseViewer.setText(item.error || item.body || '');
+    lastResponse = {
+      ok: false,
+      status: item.status ?? null,
+      elapsed_ms: item.elapsed_ms ?? null,
+      body: item.body || item.error || '',
+      error: item.error || null,
+    };
   }
 
   if (!lastRequest && lastOriginalCurl) {
@@ -275,6 +485,13 @@ async function sendRequest() {
       setBadge('失败', 'err');
       showError(data.error || '请求失败');
       responseViewer.setText(data.error || '');
+      lastResponse = {
+        ok: false,
+        status: data.status ?? null,
+        elapsed_ms: data.elapsed_ms ?? null,
+        body: data.body || data.error || '',
+        error: data.error || null,
+      };
       recordSendResult(data);
       return;
     }
@@ -283,6 +500,12 @@ async function sendRequest() {
     setBadge(`${data.status}`, statusClass);
     responseMeta.textContent = `${data.elapsed_ms} ms`;
     responseViewer.setText(data.body || '');
+    lastResponse = {
+      ok: true,
+      status: data.status,
+      elapsed_ms: data.elapsed_ms,
+      body: data.body || '',
+    };
     hideError();
     recordSendResult(data);
   } catch (err) {
@@ -293,10 +516,12 @@ async function sendRequest() {
     }
     setBadge('失败', 'err');
     showError('发送请求失败');
+    lastResponse = { ok: false, status: null, elapsed_ms: null, body: '', error: '发送请求失败' };
     recordSendResult({ ok: false, error: '发送请求失败' });
   } finally {
     RequestSendUI.clearAbort();
     setSending(false);
+    scheduleShareSave();
   }
 }
 
@@ -324,15 +549,21 @@ async function pasteAndSend() {
 
 document.getElementById('send-btn').addEventListener('click', sendRequest);
 document.getElementById('paste-send-btn').addEventListener('click', pasteAndSend);
+shareRequestBtn?.addEventListener('click', () => shareDocument());
+document.getElementById('copy-share-url')?.addEventListener('click', () => {
+  copyWithFeedback(document.getElementById('copy-share-url'), shareUrlInput?.value || '');
+});
 
 document.getElementById('clear-preview').addEventListener('click', () => {
   lastOriginalCurl = '';
   lastRequest = null;
+  lastResponse = null;
   RequestPreview.clear();
   responseViewer.clear();
   responseMeta.textContent = '';
   statusBadge.hidden = true;
   hideError();
+  scheduleShareSave();
   document.getElementById('preview-url').focus();
 });
 
@@ -369,4 +600,9 @@ RequestPreview.init({
   onPasteCurl: (curl) => convertFromCurl(curl),
 });
 
-convertFromCurl(SAMPLE_CURL);
+const urlShareId = RequestShare.parseIdFromUrl();
+if (urlShareId) {
+  loadSharedSnapshot(urlShareId);
+} else if (!RequestPreview.restoreFromStorage()) {
+  convertFromCurl(SAMPLE_CURL);
+}

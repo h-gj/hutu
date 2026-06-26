@@ -27,6 +27,18 @@ let portMappings = [];
 let lastUsedPort = null;
 let skipClearOriginalCurl = false;
 
+const shareBar = document.getElementById('rl-share-bar');
+const shareUrlInput = document.getElementById('rl-share-url');
+const shareStatusEl = document.getElementById('rl-share-status');
+const shareHintEl = document.getElementById('rl-share-hint');
+const shareRequestBtn = document.getElementById('share-request');
+
+const SHARE_SAVE_DEBOUNCE_MS = 800;
+let shareId = null;
+let shareSaveTimer = null;
+let isApplyingShare = false;
+let isSharing = false;
+
 const SAMPLE_CURL = `curl 'https://v8api.k0v.cn/api/datacenter/partno-info/public/?partno=09475656032&mfg=HARTING+Technology+Group' \\
   -H 'accept: application/json, text/plain, */*' \\
   -H 'accept-language: zh-CN,zh;q=0.9,en;q=0.8,en-US;q=0.7' \\
@@ -47,6 +59,216 @@ function getLocalCurl() {
 
 function getRecordCurl() {
   return lastOriginalCurl || getLocalCurl();
+}
+
+function buildShareSnapshot() {
+  const request = lastRequest || RequestPreview.buildRequest();
+  const snapshot = {
+    curl: getRecordCurl(),
+    port: getPort(),
+    portMappings: portMappings.map(m => ({ domain: m.domain, port: m.port })),
+    request: request?.url ? request : null,
+  };
+  const response = buildResponseSnapshot();
+  if (response) snapshot.response = response;
+  return snapshot;
+}
+
+function buildResponseSnapshot() {
+  if (!lastResponse) return null;
+  const body = lastResponse.body || lastResponse.error || responseViewer.getText() || '';
+  if (!body.trim() && lastResponse.status == null) return null;
+  return {
+    ok: Boolean(lastResponse.ok),
+    status: lastResponse.status ?? null,
+    elapsed_ms: lastResponse.elapsed_ms ?? null,
+    body: body.slice(0, BODY_STORAGE_MAX),
+    error: lastResponse.error || null,
+  };
+}
+
+function applyResponseSnapshot(response) {
+  if (!response || (!response.body && !response.error && response.status == null)) {
+    lastResponse = null;
+    statusBadge.hidden = true;
+    responseMeta.textContent = '';
+    responseViewer.clear();
+    return;
+  }
+
+  lastResponse = { ...response };
+
+  if (response.status != null) {
+    const statusClass = response.ok && response.status >= 200 && response.status < 300 ? 'ok' : 'err';
+    setBadge(String(response.status), statusClass);
+    responseMeta.textContent = response.elapsed_ms != null ? `${response.elapsed_ms} ms` : '';
+    responseViewer.setText(response.body || response.error || '');
+    return;
+  }
+
+  statusBadge.hidden = true;
+  responseMeta.textContent = '';
+  responseViewer.setText(response.error || response.body || '');
+}
+
+function showShareBar(id) {
+  if (!shareBar || !shareUrlInput) return null;
+  const shareUrl = RequestShare.buildPageUrl(id);
+  shareUrlInput.value = shareUrl;
+  shareBar.removeAttribute('hidden');
+  if (shareHintEl) shareHintEl.hidden = true;
+  if (shareRequestBtn) shareRequestBtn.textContent = '复制分享链接';
+  shareBar.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+  return shareUrl;
+}
+
+function hideShareUi() {
+  if (shareBar) shareBar.setAttribute('hidden', '');
+  if (shareHintEl) shareHintEl.hidden = false;
+  if (shareRequestBtn) shareRequestBtn.textContent = '分享';
+}
+
+function setShareId(id) {
+  shareId = id;
+  const shareUrl = showShareBar(id);
+  try {
+    RequestShare.setPageUrl(id);
+  } catch {
+    /* ignore URL update errors */
+  }
+  return shareUrl;
+}
+
+function scheduleShareSave() {
+  if (!shareId || isApplyingShare) return;
+  clearTimeout(shareSaveTimer);
+  shareSaveTimer = setTimeout(saveShareSnapshot, SHARE_SAVE_DEBOUNCE_MS);
+}
+
+async function saveShareSnapshot() {
+  if (!shareId || isApplyingShare) return;
+  try {
+    await RequestShare.save(shareId, buildShareSnapshot());
+    if (shareStatusEl) {
+      shareStatusEl.hidden = false;
+      clearTimeout(saveShareSnapshot._hideTimer);
+      saveShareSnapshot._hideTimer = setTimeout(() => {
+        shareStatusEl.hidden = true;
+      }, 2000);
+    }
+  } catch {
+    /* ignore */
+  }
+}
+
+async function copyWithFeedback(btn, text) {
+  if (!btn) return;
+  const copyText = text || shareUrlInput?.value || (shareId ? RequestShare.buildPageUrl(shareId) : '');
+  if (!copyText) return;
+  const orig = btn.textContent;
+  try {
+    await navigator.clipboard.writeText(copyText);
+  } catch {
+    /* fallback below */
+  }
+  btn.textContent = '已复制';
+  setTimeout(() => { btn.textContent = orig; }, 1500);
+}
+
+function hasShareableContent() {
+  const snapshot = buildShareSnapshot();
+  return Boolean(snapshot.curl?.trim() || snapshot.request?.url?.trim());
+}
+
+async function shareDocument() {
+  if (isSharing) return;
+
+  if (!hasShareableContent()) {
+    shareRequestBtn.textContent = '内容为空';
+    setTimeout(() => {
+      shareRequestBtn.textContent = shareId ? '复制分享链接' : '分享';
+    }, 1500);
+    return;
+  }
+
+  if (shareId) {
+    const shareUrl = showShareBar(shareId) || RequestShare.buildPageUrl(shareId);
+    await copyWithFeedback(shareRequestBtn, shareUrl);
+    return;
+  }
+
+  const orig = shareRequestBtn.textContent;
+  isSharing = true;
+  shareRequestBtn.disabled = true;
+  shareRequestBtn.textContent = '生成中…';
+  try {
+    const id = await RequestShare.create(buildShareSnapshot());
+    const shareUrl = setShareId(id) || RequestShare.buildPageUrl(id);
+    if (shareStatusEl) {
+      shareStatusEl.hidden = false;
+      shareStatusEl.textContent = '已生成分享链接';
+    }
+    await copyWithFeedback(shareRequestBtn, shareUrl);
+  } catch {
+    shareRequestBtn.textContent = '分享失败';
+    setTimeout(() => { shareRequestBtn.textContent = orig; }, 1500);
+  } finally {
+    isSharing = false;
+    shareRequestBtn.disabled = false;
+  }
+}
+
+function applyShareSnapshot(data, { persistLocal = false } = {}) {
+  isApplyingShare = true;
+  try {
+    if (data.port >= 1 && data.port <= 65535) {
+      portInput.value = data.port;
+      if (persistLocal) savePort();
+    }
+    if (Array.isArray(data.portMappings)) {
+      portMappings = data.portMappings.filter(m => m?.domain && m?.port);
+      renderPortMappings();
+      if (persistLocal) savePortMappings();
+    }
+    if (data.request?.url) {
+      lastOriginalCurl = data.curl || '';
+      lastRequest = data.request;
+      skipClearOriginalCurl = true;
+      RequestPreview.populate(lastRequest);
+      skipClearOriginalCurl = false;
+      if (lastOriginalCurl) {
+        try {
+          const converted = CurlConvert.convertCurl(lastOriginalCurl, getPort(), portMappings);
+          lastUsedPort = converted.used_port;
+          updatePortHint(converted.matched_domain, converted.used_port);
+        } catch {
+          lastUsedPort = getPort();
+          updatePortHint(null, lastUsedPort);
+        }
+      } else {
+        lastUsedPort = getPort();
+        updatePortHint(null, lastUsedPort);
+      }
+    } else if (data.curl?.trim()) {
+      convertFromCurl(data.curl);
+    }
+    applyResponseSnapshot(data.response);
+    hideError();
+  } finally {
+    isApplyingShare = false;
+  }
+}
+
+async function loadSharedSnapshot(id) {
+  try {
+    const content = await RequestShare.load(id);
+    applyShareSnapshot(content);
+    setShareId(id);
+  } catch (err) {
+    showError(err.message || '加载分享失败');
+    RequestShare.clearPageUrl();
+    convertFromCurl(SAMPLE_CURL);
+  }
 }
 
 async function generateApiDoc() {
@@ -190,6 +412,7 @@ function renderPortMappings() {
       savePortMappings();
       renderPortMappings();
       reconvert();
+      scheduleShareSave();
     });
   });
 }
@@ -232,6 +455,7 @@ function updateMappingField(input) {
   savePortMappings();
   hideError();
   reconvert();
+  scheduleShareSave();
 }
 
 function addPortMapping() {
@@ -261,11 +485,13 @@ function addPortMapping() {
   domainInput.value = '';
   hideError();
   reconvert();
+  scheduleShareSave();
 }
 
 function applyPreviewRequest(request) {
   lastRequest = request;
   if (!skipClearOriginalCurl) lastOriginalCurl = '';
+  scheduleShareSave();
 }
 
 function convertFromCurl(curl) {
@@ -290,6 +516,7 @@ function convertFromCurl(curl) {
     RequestPreview.populate(lastRequest);
     skipClearOriginalCurl = false;
     hideError();
+    scheduleShareSave();
     return true;
   } catch (e) {
     lastOriginalCurl = text;
@@ -679,6 +906,7 @@ async function sendRequest() {
   } finally {
     RequestSendUI.clearAbort();
     setSending(false);
+    scheduleShareSave();
   }
 }
 
@@ -823,6 +1051,10 @@ document.getElementById('send-btn').addEventListener('click', sendRequest);
 document.getElementById('paste-send-btn').addEventListener('click', pasteAndSend);
 document.getElementById('paste-submit-dev-btn').addEventListener('click', pasteAndSubmitDev);
 document.getElementById('gen-api-doc-btn').addEventListener('click', generateApiDoc);
+shareRequestBtn?.addEventListener('click', () => shareDocument());
+document.getElementById('copy-share-url')?.addEventListener('click', () => {
+  copyWithFeedback(document.getElementById('copy-share-url'), shareUrlInput?.value || '');
+});
 
 document.querySelectorAll('.section-panel-tab').forEach(btn => {
   btn.addEventListener('click', () => switchPanelTab(btn.dataset.panel));
@@ -854,10 +1086,14 @@ document.getElementById('map-port').addEventListener('keydown', (e) => {
   if (e.key === 'Enter') addPortMapping();
 });
 
-portInput.addEventListener('input', savePort);
+portInput.addEventListener('input', () => {
+  savePort();
+  scheduleShareSave();
+});
 portInput.addEventListener('change', () => {
   savePort();
   reconvert();
+  scheduleShareSave();
 });
 
 document.getElementById('clear-preview').addEventListener('click', () => {
@@ -871,6 +1107,7 @@ document.getElementById('clear-preview').addEventListener('click', () => {
   responseMeta.textContent = '';
   statusBadge.hidden = true;
   hideError();
+  scheduleShareSave();
   document.getElementById('preview-url').focus();
 });
 
@@ -923,4 +1160,9 @@ RequestPreview.init({
   onPasteCurl: (curl) => convertFromCurl(curl),
 });
 
-convertFromCurl(SAMPLE_CURL);
+const urlShareId = RequestShare.parseIdFromUrl();
+if (urlShareId) {
+  loadSharedSnapshot(urlShareId);
+} else if (!RequestPreview.restoreFromStorage()) {
+  convertFromCurl(SAMPLE_CURL);
+}

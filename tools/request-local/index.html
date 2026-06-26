@@ -10,6 +10,7 @@
   <link rel="stylesheet" href="/static/css/common.css">
   <link rel="stylesheet" href="/static/css/tool.css">
   <link rel="stylesheet" href="/static/css/request-local.css">
+  <link rel="stylesheet" href="/static/css/markdown-reviewer.css">
 </head>
 <body>
   <header class="site-header">
@@ -24,8 +25,17 @@
   <main class="container container-wide">
     <div class="tool-header">
       <h1>Request Local</h1>
-      <p class="subtitle">在地址栏粘贴 curl，自动转为本地请求并发送查看响应</p>
+      <p class="subtitle">在地址栏粘贴 curl，自动转为本地请求并发送查看响应；支持分享链接</p>
     </div>
+
+    <div class="md-share-bar" id="rl-share-bar" hidden>
+      <span class="md-share-label">分享链接</span>
+      <input type="text" class="md-share-url" id="rl-share-url" readonly spellcheck="false">
+      <button type="button" class="btn-link" id="copy-share-url">复制链接</button>
+      <span class="md-share-status" id="rl-share-status" hidden>已自动保存</span>
+    </div>
+
+    <!-- <p class="md-share-hint" id="rl-share-hint">配置好请求后点击「分享」生成链接；分享后修改会自动保存。</p> -->
 
     <div class="port-bar">
       <label for="port">默认端口</label>
@@ -43,7 +53,10 @@
     <section class="request-preview-section" id="request-preview-section">
       <div class="preview-section-header">
         <h2>请求预览</h2>
-        <button type="button" class="btn-link" id="clear-preview">清空</button>
+        <div class="preview-section-actions">
+          <button type="button" class="btn-link" id="clear-preview">清空</button>
+          <button type="button" class="btn-link" id="share-request">分享</button>
+        </div>
       </div>
 
       <div class="preview-request-bar">
@@ -256,6 +269,7 @@
   <script src="/static/js/request-preview.js"></script>
   <script src="/static/js/response-viewer.js"></script>
   <script src="/static/js/request-send-ui.js"></script>
+  <script src="/static/js/request-share.js" data-api="/api/request-local/share"></script>
   <script src="/static/js/api-doc-generator.js"></script>
   <script src="/static/js/request-local.js"></script>
 </body>

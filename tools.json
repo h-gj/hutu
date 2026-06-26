@@ -94,6 +94,14 @@
       "intro": "粘贴 curl 解析参数，发送后自动下载并打开文件（Excel、PDF 等），可选转为本地请求",
       "jump_to": "/tools/request-view/",
       "category": "dev"
+    },
+    {
+      "id": "cache",
+      "logo": "⚡",
+      "title": "清查缓存",
+      "intro": "查询与清理 icgoo 缓存：输入 key 一键查缓存或清缓存",
+      "jump_to": "/tools/cache/",
+      "category": "icgoo"
     }
   ]
 }

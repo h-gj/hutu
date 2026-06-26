@@ -17,7 +17,7 @@ from sql_utils import process_sql
 from http.server import BaseHTTPRequestHandler, HTTPServer
 from urllib.parse import unquote
 
-HOST = "127.0.0.1"
+HOST = "0.0.0.0"
 PORT = 8765
 DIR = os.path.dirname(os.path.abspath(__file__))
 TOOLS_FILE = os.path.join(DIR, "tools.json")
@@ -27,6 +27,21 @@ DEV_SUBMISSIONS_MAX = 100
 NOTES_DIR = os.path.join(DIR, "notes")
 MARKDOWN_DOCS_DIR = os.path.join(DIR, "markdown_docs")
 WHITEBOARDS_DIR = os.path.join(DIR, "whiteboards")
+REQUEST_SHARES_DIR = os.path.join(DIR, "request_shares")
+POSTBUMAN_SHARES_DIR = os.path.join(DIR, "postbuman_shares")
+
+SHARE_TOOL_CONFIG = {
+    "request-local": {
+        "dir": REQUEST_SHARES_DIR,
+        "page": "/tools/request-local/",
+        "api_prefix": "/api/request-local/share",
+    },
+    "postbuman": {
+        "dir": POSTBUMAN_SHARES_DIR,
+        "page": "/tools/postbuman/",
+        "api_prefix": "/api/postbuman/share",
+    },
+}
 NOTE_SLUG_RE = re.compile(r"^[a-z0-9]{3,32}$")
 DOC_ID_RE = re.compile(r"^[a-z0-9]{10,16}$")
 RESERVED_PATHS = frozenset(("/", "/index.html", "/favicon.ico"))
@@ -236,6 +251,80 @@ def create_whiteboard(content: dict) -> str:
     raise RuntimeError("无法生成白板 ID")
 
 
+def ensure_request_shares_dir():
+    os.makedirs(REQUEST_SHARES_DIR, exist_ok=True)
+
+
+def ensure_postbuman_shares_dir():
+    os.makedirs(POSTBUMAN_SHARES_DIR, exist_ok=True)
+
+
+def resolve_share_route(path: str) -> tuple[str, str] | None:
+    for tool_id, cfg in SHARE_TOOL_CONFIG.items():
+        prefix = cfg["api_prefix"]
+        if path == prefix:
+            return tool_id, ""
+        if path.startswith(prefix + "/"):
+            share_id = path[len(prefix) + 1:].strip("/")
+            if share_id:
+                return tool_id, share_id
+    return None
+
+
+def tool_share_path(tool_id: str, share_id: str) -> str:
+    cfg = SHARE_TOOL_CONFIG[tool_id]
+    return os.path.join(cfg["dir"], f"{share_id}.json")
+
+
+def load_tool_share(tool_id: str, share_id: str) -> dict | None:
+    path = tool_share_path(tool_id, share_id)
+    if not os.path.isfile(path):
+        return None
+    with open(path, "r", encoding="utf-8") as f:
+        data = json.load(f)
+    updated_at = int(os.path.getmtime(path) * 1000)
+    return {"content": data, "updated_at": updated_at}
+
+
+def save_tool_share(tool_id: str, share_id: str, content: dict) -> int:
+    cfg = SHARE_TOOL_CONFIG[tool_id]
+    os.makedirs(cfg["dir"], exist_ok=True)
+    path = tool_share_path(tool_id, share_id)
+    tmp_path = f"{path}.tmp"
+    with open(tmp_path, "w", encoding="utf-8") as f:
+        json.dump(content, f, ensure_ascii=False, separators=(",", ":"))
+    os.replace(tmp_path, path)
+    return int(time.time() * 1000)
+
+
+def create_tool_share(tool_id: str, content: dict) -> str:
+    cfg = SHARE_TOOL_CONFIG[tool_id]
+    os.makedirs(cfg["dir"], exist_ok=True)
+    for _ in range(8):
+        share_id = secrets.token_hex(6)
+        path = tool_share_path(tool_id, share_id)
+        if not os.path.exists(path):
+            save_tool_share(tool_id, share_id, content)
+            return share_id
+    raise RuntimeError("无法生成分享 ID")
+
+
+def request_share_path(share_id: str) -> str:
+    return tool_share_path("request-local", share_id)
+
+
+def load_request_share(share_id: str) -> dict | None:
+    return load_tool_share("request-local", share_id)
+
+
+def save_request_share(share_id: str, content: dict) -> int:
+    return save_tool_share("request-local", share_id, content)
+
+
+def create_request_share(content: dict) -> str:
+    return create_tool_share("request-local", content)
+
+
 def is_note_slug_path(path: str) -> bool:
     if path in RESERVED_PATHS:
         return False
@@ -333,6 +422,22 @@ class Handler(BaseHTTPRequestHandler):
             self._json_response({"ok": True, "id": board_id, **board})
             return
 
+        if path.startswith("/api/request-local/share/") or path.startswith("/api/postbuman/share/"):
+            route = resolve_share_route(path)
+            if not route:
+                self.send_error(404)
+                return
+            tool_id, share_id = route
+            if not DOC_ID_RE.match(share_id):
+                self.send_error(404)
+                return
+            share = load_tool_share(tool_id, share_id)
+            if share is None:
+                self._json_response({"ok": False, "error": "分享不存在"}, status=404)
+                return
+            self._json_response({"ok": True, "id": share_id, **share})
+            return
+
         if path == "/favicon.ico":
             self._serve_file(os.path.join("static", "favicon.ico"))
             return
@@ -402,6 +507,17 @@ class Handler(BaseHTTPRequestHandler):
                 return
             self._handle_save_whiteboard(board_id)
             return
+        if path.startswith("/api/request-local/share/") or path.startswith("/api/postbuman/share/"):
+            route = resolve_share_route(path)
+            if not route:
+                self.send_error(404)
+                return
+            tool_id, share_id = route
+            if not DOC_ID_RE.match(share_id):
+                self.send_error(404)
+                return
+            self._handle_save_tool_share(tool_id, share_id)
+            return
         self.send_error(404)
 
     def do_POST(self):
@@ -441,6 +557,14 @@ class Handler(BaseHTTPRequestHandler):
 
         if path == "/api/whiteboard":
             self._handle_create_whiteboard()
+            return
+
+        if path == "/api/request-local/share":
+            self._handle_create_tool_share("request-local")
+            return
+
+        if path == "/api/postbuman/share":
+            self._handle_create_tool_share("postbuman")
             return
 
         if path.startswith("/api/notes/"):
@@ -699,6 +823,47 @@ class Handler(BaseHTTPRequestHandler):
             board_id = create_whiteboard(content)
             share_url = f"/tools/whiteboard/?id={board_id}"
             self._json_response({"ok": True, "id": board_id, "url": share_url})
+        except json.JSONDecodeError as e:
+            self._json_response({"ok": False, "error": f"请求格式错误: {e}"})
+        except (ValueError, TypeError) as e:
+            self._json_response({"ok": False, "error": str(e)})
+        except Exception as e:
+            self._json_response({"ok": False, "error": f"创建失败: {e}"})
+
+    def _handle_save_tool_share(self, tool_id: str, share_id: str):
+        length = int(self.headers.get("Content-Length", 0))
+        body = self.rfile.read(length).decode("utf-8")
+
+        try:
+            payload = json.loads(body)
+            content = payload.get("content")
+            if not isinstance(content, dict):
+                raise ValueError("content 必须是对象")
+            if load_tool_share(tool_id, share_id) is None:
+                self._json_response({"ok": False, "error": "分享不存在"}, status=404)
+                return
+            updated_at = save_tool_share(tool_id, share_id, content)
+            self._json_response({"ok": True, "id": share_id, "updated_at": updated_at})
+        except json.JSONDecodeError as e:
+            self._json_response({"ok": False, "error": f"请求格式错误: {e}"})
+        except (ValueError, TypeError) as e:
+            self._json_response({"ok": False, "error": str(e)})
+        except Exception as e:
+            self._json_response({"ok": False, "error": f"保存失败: {e}"})
+
+    def _handle_create_tool_share(self, tool_id: str):
+        length = int(self.headers.get("Content-Length", 0))
+        body = self.rfile.read(length).decode("utf-8")
+
+        try:
+            payload = json.loads(body)
+            content = payload.get("content")
+            if not isinstance(content, dict):
+                raise ValueError("content 必须是对象")
+            share_id = create_tool_share(tool_id, content)
+            page = SHARE_TOOL_CONFIG[tool_id]["page"]
+            share_url = f"{page}?id={share_id}"
+            self._json_response({"ok": True, "id": share_id, "url": share_url})
         except json.JSONDecodeError as e:
             self._json_response({"ok": False, "error": f"请求格式错误: {e}"})
         except (ValueError, TypeError) as e:

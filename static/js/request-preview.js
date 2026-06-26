@@ -24,6 +24,86 @@ const RequestPreview = (() => {
   let urlSyncLock = false;
   let urlInputTimer = null;
 
+  const SAVE_DEBOUNCE_MS = 400;
+  const STORAGE_MAX_BYTES = 512 * 1024;
+  let storageKey = null;
+  let persistEnabled = false;
+  let saveStateTimer = null;
+  let isRestoring = false;
+
+  function resolveStorageKey(options) {
+    if (options.storageKey) return options.storageKey;
+    const path = window.location.pathname.replace(/\/+$/, '') || '/';
+    return `hutu-request-preview:${path}`;
+  }
+
+  function schedulePersist() {
+    if (!persistEnabled || isRestoring || !storageKey) return;
+    clearTimeout(saveStateTimer);
+    saveStateTimer = setTimeout(persistState, SAVE_DEBOUNCE_MS);
+  }
+
+  function trimRequestForStorage(request) {
+    const trimmed = { ...request, headers: { ...request.headers } };
+    const meta = trimmed.bodyMeta ? { ...trimmed.bodyMeta } : null;
+    if (meta?.binaryBase64 && meta.binaryBase64.length > 120000) {
+      meta.binaryBase64 = '';
+      meta.binaryFilename = '';
+      trimmed.body = null;
+      trimmed.body_encoding = 'utf-8';
+    }
+    trimmed.bodyMeta = meta;
+    return trimmed;
+  }
+
+  function persistState() {
+    if (!persistEnabled || isRestoring || !storageKey) return;
+    try {
+      const request = trimRequestForStorage(buildRequest());
+      if (!request.url?.trim()) {
+        removeStoredState();
+        return;
+      }
+      const payload = { request, activeTab };
+      const json = JSON.stringify(payload);
+      if (json.length > STORAGE_MAX_BYTES) return;
+      localStorage.setItem(storageKey, json);
+    } catch {
+      /* ignore quota / private mode */
+    }
+  }
+
+  function removeStoredState() {
+    if (!storageKey) return;
+    try {
+      localStorage.removeItem(storageKey);
+    } catch {
+      /* ignore */
+    }
+  }
+
+  function restoreFromStorage() {
+    if (!storageKey) return false;
+    try {
+      const raw = localStorage.getItem(storageKey);
+      if (!raw) return false;
+      const data = JSON.parse(raw);
+      if (!data?.request?.url?.trim()) return false;
+      isRestoring = true;
+      populate(data.request);
+      if (data.activeTab && data.activeTab !== activeTab) {
+        switchTab(data.activeTab, { skipPersist: true });
+      }
+      isRestoring = false;
+      const req = buildRequest();
+      if (onChange) onChange(req);
+      return true;
+    } catch {
+      isRestoring = false;
+      return false;
+    }
+  }
+
   const methodSelect = document.getElementById('preview-method');
   const urlInput = document.getElementById('preview-url');
   const bodyInput = document.getElementById('preview-body-input');
@@ -196,7 +276,7 @@ const RequestPreview = (() => {
     }
   }
 
-  function switchTab(tab) {
+  function switchTab(tab, options = {}) {
     activeTab = tab;
     document.querySelectorAll('.preview-tab').forEach(btn => {
       btn.classList.toggle('active', btn.dataset.previewTab === tab);
@@ -204,6 +284,7 @@ const RequestPreview = (() => {
     document.querySelectorAll('.preview-panel').forEach(panel => {
       panel.hidden = panel.dataset.previewPanel !== tab;
     });
+    if (!options.skipPersist) schedulePersist();
   }
 
   function applyParamsToUrl() {
@@ -219,6 +300,7 @@ const RequestPreview = (() => {
 
     const req = buildRequest();
     if (onChange) onChange(req);
+    schedulePersist();
     return req;
   }
 
@@ -510,6 +592,7 @@ const RequestPreview = (() => {
       paramRows,
     );
     urlSyncLock = false;
+    if (!isRestoring) schedulePersist();
   }
 
   function clear() {
@@ -535,6 +618,7 @@ const RequestPreview = (() => {
     renderUrlencodedRows();
     updateHeaderTabCount();
     updateParamsTabCount();
+    removeStoredState();
   }
 
   function setUrlBar(text) {
@@ -601,8 +685,23 @@ const RequestPreview = (() => {
 
   function setupCopyCurlButton() {
     const header = document.querySelector('.preview-section-header');
-    const clearBtn = document.getElementById('clear-preview');
     if (!header || document.getElementById('copy-preview-curl')) return;
+
+    let actions = header.querySelector('.preview-section-actions');
+    if (!actions) {
+      actions = document.createElement('div');
+      actions.className = 'preview-section-actions';
+      header.appendChild(actions);
+    }
+
+    const shareBtn = document.getElementById('share-request');
+    const clearBtn = document.getElementById('clear-preview');
+    if (shareBtn && shareBtn.parentElement !== actions) {
+      actions.appendChild(shareBtn);
+    }
+    if (clearBtn && clearBtn.parentElement !== actions) {
+      actions.appendChild(clearBtn);
+    }
 
     const copyBtn = document.createElement('button');
     copyBtn.type = 'button';
@@ -611,21 +710,14 @@ const RequestPreview = (() => {
     copyBtn.textContent = '复制 curl';
     copyBtn.title = '复制当前请求为 curl 命令';
     copyBtn.addEventListener('click', () => copyCurl(copyBtn));
-
-    if (clearBtn && clearBtn.parentElement === header) {
-      const actions = document.createElement('div');
-      actions.className = 'preview-section-actions';
-      actions.appendChild(copyBtn);
-      actions.appendChild(clearBtn);
-      header.appendChild(actions);
-    } else {
-      header.appendChild(copyBtn);
-    }
+    actions.appendChild(copyBtn);
   }
 
   function init(options) {
     onChange = options.onChange;
     const onPasteCurl = options.onPasteCurl;
+    storageKey = resolveStorageKey(options);
+    persistEnabled = options.persist !== false;
 
     function isCurlLike(text) {
       const t = text.trim();
@@ -725,11 +817,20 @@ const RequestPreview = (() => {
 
     setupCopyCurlButton();
 
-    switchTab('params');
+    switchTab('params', { skipPersist: true });
     setBodyType('none');
     renderFormDataRows();
     renderUrlencodedRows();
   }
 
-  return { init, populate, clear, buildRequest, setUrlBar, copyCurl };
+  return {
+    init,
+    populate,
+    clear,
+    buildRequest,
+    setUrlBar,
+    copyCurl,
+    restoreFromStorage,
+    removeStoredState,
+  };
 })();

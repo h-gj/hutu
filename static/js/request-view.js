@@ -453,3 +453,5 @@ RequestPreview.init({
   onChange: (request) => applyPreviewRequest(request),
   onPasteCurl: (curl) => convertFromCurl(curl),
 });
+
+RequestPreview.restoreFromStorage();
